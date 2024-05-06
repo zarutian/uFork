@@ -29,8 +29,8 @@ todo:
   1.5  ROL      [x]
   1.6  INCR     [x]
   1.7  FETCH    [x]
-  1.8  STORE    [ ]
-  1.9  (LIT)    [ ]
+  1.8  STORE    [x]
+  1.9  (LIT)    [x]
   1.10 DUP      [ ]
   1.11 DROP     [ ]
   1.12 SWAP     [ ]
@@ -197,4 +197,16 @@ test("uCode cpu 2v2 STORE instr", async (t) => {
   } else {
     t.fail(`expected 0xCAFE but got 0x${result.toString(16).padStart(4, "0")}`);
   }
+});
+test("uCode cpu 2v2 (LIT) instr", (t) => {
+  const { emu, dstack, memory } = await common_setup();
+  emu.pc = 0x0000;
+  memory.store(0x021F, 0x0000);
+  memory.store(0xDEAD, 0x0001);
+  emu.doOneInstruction();
+  if (result == 0xDEAD) {
+    t.pass();
+  } else {
+    t.fail(`expected 0xDEAD but got 0x${result.toString(16).padStart(4, "0")}`);
+}
 });
