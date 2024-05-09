@@ -31,7 +31,7 @@ todo:
   1.7  FETCH    [x]
   1.8  STORE    [x]
   1.9  (LIT)    [x]
-  1.10 DUP      [ ]
+  1.10 DUP      [x]
   1.11 DROP     [ ]
   1.12 SWAP     [ ]
   1.13 TO_R     [ ]
@@ -204,9 +204,25 @@ test("uCode cpu 2v2 (LIT) instr", (t) => {
   memory.store(0x021F, 0x0000);
   memory.store(0xDEAD, 0x0001);
   emu.doOneInstruction();
+  const result = dstack.pop();
   if (result == 0xDEAD) {
     t.pass();
   } else {
     t.fail(`expected 0xDEAD but got 0x${result.toString(16).padStart(4, "0")}`);
 }
 });
+test("uCode cpu 2v2 DUP instr", (t) => {
+  const { emu, dstack, memory } = await common_setup();
+  emu.pc = 0x0000;
+  memory.store(0x0200, 0x0000);
+  dstack.push(0x0021);
+  emu.doOneInstruction();
+  const r2 = dstack.pop();
+  const r1 = dstack.pop();
+  if ((r1 == 0x0021) && (r2 == 0x0021)) {
+    t.pass();
+  } else {
+    t.fail();
+  }
+});
+
