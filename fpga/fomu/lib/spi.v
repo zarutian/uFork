@@ -75,9 +75,10 @@ module spi_master #(
       end else begin
         clkdiv_reg <= clkdiv_reg + 1;
       end
+      o_SCLK <= (SCLK ^ CPOL) & !o_SS;
       
       if (state == START) begin
-      end else if (stats == STOP) begin
+      end else if (state == STOP) begin
       end else begin
       end
     end
@@ -100,7 +101,9 @@ module spi_master #(
       end
     end
     assign o_SS = !CTRL_reg[2];
-    state = START;
+    if ((CTRL_reg[2] == 1) && (state == IDLE)) begin
+      state = START;
+    end
   end
 endmodule
 
