@@ -78,6 +78,8 @@ module spi_master #(
       o_SCLK <= (SCLK ^ CPOL) & !o_SS;
       
       if (state == START) begin
+        if (CPHA == 0) begin
+        end
       end else if (state == STOP) begin
       end else begin
       end
