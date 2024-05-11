@@ -901,9 +901,9 @@ export const minicore = (asm, opts) => {
 
   def("RX?"); // ( -- char T | F )
   dat("DEBUG_RX?", "DUP");
-  asm.macro.brz("RX?_l0");
-  dat("DEBUG_RX@", "SWAP");
-  def("RX?_l0");
+  asm.macro.efSegð("RX?", () => {}, () => {
+    dat("DEBUG_RX@", "SWAP");
+  });
   dat("EXIT");
   
   def("EMIT", "TX!");
