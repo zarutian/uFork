@@ -156,11 +156,12 @@ export const uFork = (asm) => {
   dat("DUP", "uFork_isQuad?", "SWAP", "uFork_isMutable?", "&", "EXIT");
 
   def("uFork_isOpaque?"); // ( specimen -- bool )
-  dat("DUP", "uFork_isRamQuad?");
-  asm.macro.brz("uFork_isOpaque?_l0");
-  dat("(LIT)", 0x2000, "&");
-  asm.macro.jmp("CLEAN_BOOL");
-  def("uFork_isOpaque?_l0");
+  asm.macro.efSegð("uFork_isOpaque?", 
+    () => { dat("DUP", "uFork_isRamQuad?"); },
+    () => {
+      dat("(LIT)", 0x2000, "&");
+      asm.macro.jmp("CLEAN_BOOL");
+    })
   dat("DROP");
   asm.macro.jmp("FALSE");
 
@@ -206,19 +207,24 @@ export const uFork = (asm) => {
   } else {
     // first check if any quads are on the free list
     dat("uFork_memoryDescriptor", "qx@"); // ( qa )
-    dat("DUP", "uFork_()", "=");          // ( qa notNil? )
-    asm.macro.brz("uFork_allot_l0");      // ( qa )
-    // no quads on the free list, increment top addr and use that
-    dat("uFork_memoryDescriptor", "qt@");
-    dat("DUP", "uFork_maxTopOfQuadMemory", "<");
-    asm.macro.brz("uFork_outOfQuadMemory");
-    dat("1+", "DUP");
-    dat("uFork_memoryDescriptor", "qt!");
-    asm.macro.jmp("uFork_allot_l1");
-    def("uFork_allot_l0"); // ( qa ) got a quad off the free list
-    dat("DUP", "qy@", "uFork_memoryDescriptor", "qx!"); // update the free list
-    dat("uFork_memoryDescriptor", "qy@", "uFork_decr", "uFork_memoryDescriptor", "qy!");
-    def("uFork_allot_l1"); // ( qa ) clean the quad
+    asm.macro.efSegð("uFork_allot",
+      () => {
+        dat("DUP", "uFork_()", "=");          // ( qa notNil? )
+      },
+      () => {
+        // no quads on the free list, increment top addr and use that
+        dat("uFork_memoryDescriptor", "qt@");
+        dat("DUP", "uFork_maxTopOfQuadMemory", "<");
+        asm.macro.brz("uFork_outOfQuadMemory");
+        dat("1+", "DUP");
+        dat("uFork_memoryDescriptor", "qt!");
+      },
+      () => {
+        // ( qa ) got a quad off the free list
+        dat("DUP", "qy@", "uFork_memoryDescriptor", "qx!"); // update the free list
+        dat("uFork_memoryDescriptor", "qy@", "uFork_decr", "uFork_memoryDescriptor", "qy!");
+      });
+    // ( qa ) clean the quad
     dat("uFork_#?__OVER", "qt!");
     dat("uFork_#?__OVER", "qx!");
     dat("uFork_#?__OVER", "qy!");
