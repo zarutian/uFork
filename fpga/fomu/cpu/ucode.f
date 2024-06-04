@@ -21,8 +21,6 @@
 0x7A CONSTANT 'z'
 0x7F CONSTANT DEL
 
-: (JMP)
-    R>
 : @EXECUTE
     @
 : EXECUTE
@@ -33,10 +31,6 @@
     SKZ SWAP
 : (DROP)
     DROP ;
-: (VAR)
-    R> ;
-: (CONST)
-    R> @ ;
 : NIP ( a b -- b )
     SWAP DROP ;
 : TUCK ( a b -- b a b )
@@ -139,9 +133,9 @@
 : RX@ ( -- char )
     0x03 IO@ ;
 : SPACES ( n -- )
-    ?R0
+    ?LOOP-
         SPACE
-    LOOP- ;
+    AGAIN ;
 : CR ( -- )
     '\r' EMIT '\n' EMIT ;
 : ECHO ( char -- )
@@ -152,9 +146,9 @@
 : X# ( n -- )
     TOHEX EMIT ;
 : X. ( n -- )
-    4 ?R0
+    4 ?LOOP-
         4ROL DUP X#
-    LOOP- DROP ;
+    AGAIN DROP ;
 
 ( Debugging Monitor )
 0x21 CONSTANT '!'
@@ -242,7 +236,7 @@ VARIABLE here   ( bulk copy addr )
     DUP 0< IF
         2DROP
     ELSE
-        1+ ?R0
+        1+ ?LOOP-
             DUP fetch       ( D: addr data )
             OVER 0x7 AND IF
                 SPACE
@@ -250,7 +244,7 @@ VARIABLE here   ( bulk copy addr )
                 CR
             THEN
             X. 1+           ( D: addr+1 )
-        LOOP- CR DROP
+        AGAIN CR DROP
     THEN ;
 : >inp ( key -- )
     FROMHEX inp @           ( D: nybble accum )

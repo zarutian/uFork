@@ -69,15 +69,36 @@ to communicate with the serial device.
 
 On a Mac, determine the available devices like this:
 
-    $ ls /dev/tty.*
+    ls /dev/tty.*
 
 Then run the `screen` program to connect
 to the serial port at your desired baud-rate.
 
-    $ screen /dev/tty.usbserial-AD0JIXTZ 115200
+    screen /dev/tty.usbserial-AD0JIXTZ 115200
 
 Use the key sequence `Ctrl-a + k` to kill the terminal session.
 
 ## Sample CPU Trace (Simulated)
 
 ![CPU Trace](sample_cpu_trace.png)
+
+## uCode Programming Tools
+
+Various JavaScript-based tools are available
+to support uCode program development.
+
+### Command-line Tools
+
+To compile uCode/Forth source into a memory-image file
+for inclusion into Verilog designs.
+
+    deno run ucode_cli.js <ucode.f >ucode_rom.mem
+
+To run uCode in a simulator of the uCode machine,
+with console i/o connected to the simulated UART.
+
+    deno run --allow-read ucode_sim_cli.js ucode.f
+
+The simulator can also load and run a memory-image file.
+
+    deno run --allow-read ucode_sim_cli.js ucode_rom.mem
