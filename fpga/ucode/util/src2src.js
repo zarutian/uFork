@@ -8,7 +8,9 @@
 // @desc used in the same way as makeAssembler() in masm.js
 export const makeSrc2srcTranslator = (opts) => {
   const asm = {};
-  
+  asm.symbols = {};
+  asm.symbols.define = (sym, val = undefined) => {
+  };
   return asm;
 };
 
