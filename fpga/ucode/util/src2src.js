@@ -55,14 +55,17 @@ export const makeSrc2srcTranslator = (opts) => {
   };
 
   asm.macro = {};
+  asm.symbols.define("(JMP)", 0xDEAD);
   asm.macro.jmp = (dest) => {
     asm.data("JMP", dest);
   };
+  asm.symbols.define("(BRZ)", 0xDEAD);
   asm.macro.brz = (dest) => {
     asm.data("BRZ", dest);
   };
+  asm.symbols.define("(NEXT)", 0xDEAD);
   asm.macro.loopMinus = (dest) => {
-    asm.data("(NEXT)", dest);
+    asm.data("NEXT", dest);
   }
   
   asm.def = asm.symbols.define;
