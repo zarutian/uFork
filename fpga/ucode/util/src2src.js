@@ -82,6 +82,17 @@ export const makeSrc2srcTranslator = (opts) => {
     body();
     text.push("UNTIL");
   };
+  //                  forskeyti, yrðing, afleiðing,  annars
+  asm.macro.efSegð = (prefix, condition, consequent, alternative) => {
+    condition();
+    text.push("IF");
+    consequent();
+    if (alternative != undefined) {
+      text.push("ELSE");
+      alternative();
+    }
+    text.push("THEN");
+  };
   
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
