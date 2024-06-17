@@ -13,6 +13,12 @@ export const makeSrc2srcTranslator = (opts) => {
   asm.symbols = {};
   asm.symbols.define = (sym, val = undefined) => {
   };
+  asm.symbols.lookup =    (sym) => { return syms.get(sym); };
+  asm.symbols.isDefined = (sym) => { return syms.has(sym); };
+  asm.symbols.redefine  = (sym, val = undefined) => {
+    syms.delete(sym);
+    asm.symbols.define(sym, val);
+  };
   return asm;
 };
 
