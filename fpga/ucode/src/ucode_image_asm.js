@@ -372,44 +372,52 @@ export const minicore = (asm, opts) => {
     }
     dat(">R", "EXIT");
   }
-  asm.macro.countDownLoop = (prefix, body) => {
-    dat(">R");
-    asm.macro.jmp(prefix.concat("_loopCheck"));
-    asm.symbols.define(prefix.concat("_loopStart"));
-    body();
-    def(prefix.concat("_loopCheck"));
-    if (asm.macro.loopMinus == undefined) {
-      asm.macro.loopMinus = (dest) => { dat("(NEXT)", dest); }
-    }
-    asm.macro.loopMinus(prefix.concat("_loopStart"));
-  };
-  asm.macro.beginAgainLoop = (prefix, body) => {
-    asm.symbols.define(prefix.concat("_loopStart"));
-    body();
-    asm.macro.jmp(prefix.concat("_loopStart"));
-  };
-  asm.macro.beginUntilLoop = (prefix, body) => {
-    asm.symbols.define(prefix.concat("_loopStart"));
-    body();
-    asm.macro.brz(prefix.concat("_loopStart"));
-  };
+  if (asm.macro.countDownLoop == undefined) {
+    asm.macro.countDownLoop = (prefix, body) => {
+      dat(">R");
+      asm.macro.jmp(prefix.concat("_loopCheck"));
+      asm.symbols.define(prefix.concat("_loopStart"));
+      body();
+      def(prefix.concat("_loopCheck"));
+      if (asm.macro.loopMinus == undefined) {
+        asm.macro.loopMinus = (dest) => { dat("(NEXT)", dest); }
+      }
+      asm.macro.loopMinus(prefix.concat("_loopStart"));
+    };
+  }
+  if (asm.macro.beginAgainLoop == undefined) {
+    asm.macro.beginAgainLoop = (prefix, body) => {
+      asm.symbols.define(prefix.concat("_loopStart"));
+      body();
+      asm.macro.jmp(prefix.concat("_loopStart"));
+    };
+  }
+  if (asm.macro.beginUntilLoop == undefined) {
+    asm.macro.beginUntilLoop = (prefix, body) => {
+      asm.symbols.define(prefix.concat("_loopStart"));
+      body();
+      asm.macro.brz(prefix.concat("_loopStart"));
+    };
+  }
 
-  //                  forskeyti, yrðing, afleiðing,  annars
-  asm.macro.efSegð = (prefix, condition, consequent, alternative) => {
-    condition();
-    if (alternative == undefined) {
-      asm.macro.brz(prefix.concat("_end"));
-      consequent();
-      asm.symbols.define(prefix.concat("_end"));
-    } else {
-      asm.macro.brz(prefix.concat("_alt"));
-      consequent();
-      asm.macro.jmp(prefix.concat("_end"));
-      asm.symbols.define(prefix.concat("_alt"));
-      alternative();
-      asm.symbols.define(prefix.concat("_end"));
-    }
-  };
+  if (asm.macro.efSegð == undefined) {
+    //                  forskeyti, yrðing, afleiðing,  annars
+    asm.macro.efSegð = (prefix, condition, consequent, alternative) => {
+      condition();
+      if (alternative == undefined) {
+        asm.macro.brz(prefix.concat("_end"));
+        consequent();
+        asm.symbols.define(prefix.concat("_end"));
+      } else {
+        asm.macro.brz(prefix.concat("_alt"));
+        consequent();
+        asm.macro.jmp(prefix.concat("_end"));
+        asm.symbols.define(prefix.concat("_alt"));
+        alternative();
+        asm.symbols.define(prefix.concat("_end"));
+      }
+    };
+  }
 
   def("(BREXIT)"); // ( bool -- ) exit caller early if bool is true
   asm.macro.brz("(BREXIT)_l0"); // ( )
