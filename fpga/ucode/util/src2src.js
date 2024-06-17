@@ -8,10 +8,22 @@
 // @desc used in the same way as makeAssembler() in masm.js
 export const makeSrc2srcTranslator = (opts) => {
   opts = (opts == undefined) ? {} : opts;
+  const text = [];
   const syms = (opts.symbols == undefined) ? new Map() : opts.symbols ;
   const asm = {};
   asm.symbols = {};
   asm.symbols.define = (sym, val = undefined) => {
+    if (syms.has(sym)) {
+      throw new Error(`the symbol ${sym} is already defined as ${syms.get(sym)}`);
+    }
+    if (val == undefined) {
+      val = 0xDEAD;
+      text.push(": ".concat(sym));
+    } else {
+      text.push("0x".concat(Number(val).toString(16).padStart(4, "0"), " CONSTANT ", sym));
+    }
+    syms.set(sym, val);
+    return val;
   };
   asm.symbols.lookup =    (sym) => { return syms.get(sym); };
   asm.symbols.isDefined = (sym) => { return syms.has(sym); };
