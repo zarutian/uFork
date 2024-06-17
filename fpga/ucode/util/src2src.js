@@ -40,6 +40,12 @@ export const makeSrc2srcTranslator = (opts) => {
     text.push("0x".concat(Number(new_addr).toString(16).padStart(4, "0"), " ORIGIN"));
     return 0xBEEF;
   };
+
+  asm.datum = (item) => {
+    text.push(" ".concat(item));
+  };
+  asm.data = (...datums) => Array.prototype.forEach.call(datums, datum);
+
   
   return asm;
 };
