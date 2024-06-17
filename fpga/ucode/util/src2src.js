@@ -36,6 +36,10 @@ export const makeSrc2srcTranslator = (opts) => {
   asm.allot = (amount = 1) => {
     throw new Error("allot is not yet implemented");
   };
+  asm.origin = (new_addr) => {
+    text.push("0x".concat(Number(new_addr).toString(16).padStart(4, "0"), " ORIGIN"));
+    return 0xBEEF;
+  };
   
   return asm;
 };
