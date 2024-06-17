@@ -32,6 +32,11 @@ export const makeSrc2srcTranslator = (opts) => {
     syms.delete(sym);
     asm.symbols.define(sym, val);
   };
+
+  asm.allot = (amount = 1) => {
+    throw new Error("allot is not yet implemented");
+  };
+  
   return asm;
 };
 
