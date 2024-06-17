@@ -46,7 +46,15 @@ export const makeSrc2srcTranslator = (opts) => {
   };
   asm.data = (...datums) => Array.prototype.forEach.call(datums, datum);
 
-  
+  asm.done = () => {
+    return Promise.resolve({ text: text.join("\n"), symbols: syms });
+  };
+
+  asm.macro = {};
+
+  asm.def = asm.symbols.define;
+  asm.dat = asm.data;
+  asm.isDefined = asm.symbols.isDefined;
   return asm;
 };
 
