@@ -28,6 +28,7 @@ export const makeSrc2srcTranslator = (opts) => {
   asm.symbols.lookup =    (sym) => { return syms.get(sym); };
   asm.symbols.isDefined = (sym) => { return syms.has(sym); };
   asm.symbols.redefine  = (sym, val = undefined) => {
+    throw new Error("Redefining is not yet implemented");
     syms.delete(sym);
     asm.symbols.define(sym, val);
   };
