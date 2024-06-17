@@ -67,6 +67,21 @@ export const makeSrc2srcTranslator = (opts) => {
   asm.macro.loopMinus = (dest) => {
     asm.data("NEXT", dest);
   }
+  asm.macro.countDownLoop = (prefix, body) => {
+    text.push("DO");
+    body();
+    text.push("LOOP-");
+  };
+  asm.macro.beginAgainLoop = (prefix, body) => {
+    text.push("BEGIN");
+    body();
+    text.push("AGAIN");
+  };
+  asm.macro.beginUntilLoop = (prefix, body) => {
+    text.push("BEGIN");
+    body();
+    text.push("UNTIL");
+  };
   
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
