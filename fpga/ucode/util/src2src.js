@@ -43,17 +43,25 @@ export const makeSrc2srcTranslator = (opts) => {
   };
 
   asm.datum = (item) => {
-    text.push(" ".concat(item));
+    text.push("".concat(item));
   };
-  asm.data = (...datums) => Array.prototype.forEach.call(datums, datum);
+  asm.data = (...datums) => {
+    const t1 = new Array(datums);
+    text.push("".concat(t1.join(" ")));
+  }
 
   asm.done = () => {
     return Promise.resolve({ text: text.join("\n"), symbols: syms });
   };
 
   asm.macro = {};
-  asm.macro.jmp = (dest) => { asm.datum("JMP", dest); };
-
+  asm.macro.jmp = (dest) => {
+    asm.data("JMP", dest);
+  };
+  asm.macro.brz = (dest) => {
+    asm.data("BRZ", dest);
+  };
+  
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
   asm.isDefined = asm.symbols.isDefined;
