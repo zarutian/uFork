@@ -61,6 +61,9 @@ export const makeSrc2srcTranslator = (opts) => {
   asm.macro.brz = (dest) => {
     asm.data("BRZ", dest);
   };
+  asm.macro.loopMinus = (dest) => {
+    asm.data("(NEXT)", dest);
+  }
   
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
