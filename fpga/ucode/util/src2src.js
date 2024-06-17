@@ -11,6 +11,7 @@ export const makeSrc2srcTranslator = (opts) => {
   const text = [];
   const syms = (opts.symbols == undefined) ? new Map() : opts.symbols ;
   const asm = {};
+  asm.addr = 0xBABE;
   asm.symbols = {};
   asm.symbols.define = (sym, val = undefined) => {
     if (syms.has(sym)) {
@@ -51,6 +52,7 @@ export const makeSrc2srcTranslator = (opts) => {
   };
 
   asm.macro = {};
+  asm.macro.jmp = (dest) => { asm.datum("JMP", dest); };
 
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
