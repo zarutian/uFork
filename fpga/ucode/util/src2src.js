@@ -93,6 +93,39 @@ export const makeSrc2srcTranslator = (opts) => {
     }
     text.push("THEN");
   };
+  if (asm.symbols.isDefined("instrset_uFork_SM2.2")) {
+    asm.symbols.define("NOP",     0xDEAD);
+    asm.symbols.define("(LIT)",   0xDEAD);
+    asm.symbols.define("(CONST)", 0xDEAD);
+    asm.symbols.define("EXIT",    0xDEAD);
+    asm.symbols.define("PLUS",    0xDEAD);
+    asm.symbols.define("AND",     0xDEAD);
+    asm.symbols.define("XOR",     0xDEAD);
+    asm.symbols.define("1LBR",    0xDEAD);
+    asm.symbols.define("INCR",    0xDEAD);
+    asm.symbols.define("FETCH",   0xDEAD);
+    asm.symbols.define("STORE",   0xDEAD);
+    asm.symbols.define("DUP",     0xDEAD);
+    asm.symbols.define("DROP",    0xDEAD);
+    asm.symbols.define("SWAP",    0xDEAD);
+    // SKZ not implemented in hardware
+    asm.symbols.define("TO_R",    0xDEAD);
+    asm.symbols.define("R_FROM",  0xDEAD);
+    asm.symbols.define("R_AT",    0xDEAD);
+    asm.symbols.define("MINUS",   0xDEAD);
+    asm.symbols.define("OR",      0xDEAD);
+    asm.symbols.define("DECR",    0xDEAD);
+    asm.symbols.define("INVERT",  0xDEAD);
+    asm.symbols.define("NEGATE",  0xDEAD);
+    asm.symbols.define("OVER",    0xDEAD);
+    asm.symbols.define("ROT",     0xDEAD);
+    asm.symbols.define("-ROT",    0xDEAD);
+    asm.symbols.define("(FALSE)", 0xDEAD);
+    asm.symbols.define("(TRUE)",  0xDEAD);
+    asm.symbols.define("1",       0xDEAD); // LSB
+    asm.symbols.define("0x8000",  0xDEAD); // MSB
+    asm.symbols.define("2*",      0xDEAD);
+  }
   
   asm.def = asm.symbols.define;
   asm.dat = asm.data;
