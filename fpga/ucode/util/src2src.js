@@ -42,12 +42,21 @@ export const makeSrc2srcTranslator = (opts) => {
     return 0xBEEF;
   };
 
+  const t2 = (item) => {
+    if (asm.symbols.isDefined(item)) {
+      const t1 = asm.symbols.lookup(item);
+      if (typeof(t1) == "string") {
+        item = t1;
+      }
+    }
+    return item;
+  };
   asm.datum = (item) => {
-    text.push("".concat(item));
+    text.push("".concat(t2(item)));
   };
   asm.data = (...datums) => {
     const t1 = new Array(datums);
-    text.push("".concat(t1.join(" ")));
+    text.push("".concat(t1.map(t2).join(" ")));
   }
 
   asm.done = () => {
