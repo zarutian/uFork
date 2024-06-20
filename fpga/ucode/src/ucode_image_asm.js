@@ -781,7 +781,8 @@ export const minicore = (asm, opts) => {
       def("fomu_sysbus!"); // ( sysbus_databyte sysbus_addrbyte -- )
       dat("0xFF_&", "SWAP", "0xFF_&", "SWAP");
       dat("(LIT)", 0x0010, "io!", "(LIT)", 0x0011, "io!", "0xFF_&", "EXIT");
-    } else if (isDefined("instrset_uFork_SM2.2")) {
+    }
+    if (isDefined("instrset_uFork_SM2") || isDefined("instrset_uFork_SM2.1") || isDefined("instrset_uFork_SM2.2")) {
       def("spi_isr",  "0x6");
       def("spi_icr",  "0x7");
       def("spi_rc0",  "0x8");
@@ -792,41 +793,40 @@ export const minicore = (asm, opts) => {
       def("spi_txdr", "0xD");
       def("spi_rxdr", "0xE");
       def("spi_csr",  "0xF");
-      if (isDefined("use_fomu_sysbus")) {
-        def("fomu_sysbus@"); // ( sysbus_addrbyte -- sysbus_databyte )
-        dat("0xFF_&", "(LIT)", 0x010, "io!", "(LIT)", 0x0011, "io@", "0xFF_&", "EXIT");
-
-        def("fomu_sysbus!"); // ( sysbus_databyte sysbus_addrbyte -- )
-        dat("0xFF_&", "SWAP", "0xFF_&", "SWAP");
-        dat("(LIT)", 0x0010, "io!", "(LIT)", 0x0011, "io!", "0xFF_&", "EXIT");
-        
-        def("spi_rc0!"); // ( byte -- )
-        dat("spi_rc0", "fomu_sysbus!", "EXIT");
-        
-        def("spi_rc1!"); // ( byte -- )
-        dat("spi_rc1", "fomu_sysbus!", "EXIT");
-
-        def("spi_rc2!"); // ( byte -- )
-        dat("spi_rc2", "fomu_sysbus!", "EXIT");
-
-        def("spi_br!"); // ( byte -- )
-        dat("spi_br", "fomu_sysbus!", "EXIT");
-
-        def("spi_sr@"); // ( -- byte )
-        dat("spi_sr", "fomu_sysbus@", "EXIT");
-
-        def("spi_txdr!"); // ( byte -- )
-        dat("spi_txdr", "fomu_sysbus!", "EXIT");
-
-        def("spi_rxdr@"); // ( -- byte )
-        dat("spi_rxdr", "fomu_sysbus@", "EXIT");
-
-        def("spi_csr!"); // ( byte -- )
-        dat("spi_csr", "fomu_sysbus!", "EXIT");
+      if (!isDefined("use_not_fomu_sysbus")) {        
+        def("spi__common!", "fomu_sysbus!");
+        def("spi__common@", "fomu_sysbus@");
       } else {
+        def("spi__common!"); // ( byte regnr -- )
+        dat("SWAP", "0xFF_&", "SWAP", "0x10", "OR", "io!", "EXIT");
+
+        def("spi__common@"); // ( regnr -- byte )
+        dat("0x10", "OR", "io@", "0xFF_&", "EXIT");
       }
-    }
-    if (isDefined("instrset_uFork_SM2") || isDefined("instrset_uFork_SM2.1")) {
+      def("spi_rc0!"); // ( byte -- )
+      dat("spi_rc0", "spi__common!", "EXIT");
+        
+      def("spi_rc1!"); // ( byte -- )
+      dat("spi_rc1", "spi__common!", "EXIT");
+
+      def("spi_rc2!"); // ( byte -- )
+      dat("spi_rc2", "spi__common!", "EXIT");
+
+      def("spi_br!"); // ( byte -- )
+      dat("spi_br", "spi__common!", "EXIT");
+
+      def("spi_sr@"); // ( -- byte )
+      dat("spi_sr", "spi__common@", "EXIT");
+
+      def("spi_txdr!"); // ( byte -- )
+      dat("spi_txdr", "spi__common!", "EXIT");
+
+      def("spi_rxdr@"); // ( -- byte )
+      dat("spi_rxdr", "spi__common@", "EXIT");
+
+      def("spi_csr!"); // ( byte -- )
+      dat("spi_csr", "spi__common!", "EXIT");
+      
       def("spi1_start"); // ( SlaveSelectMask -- )
       // asuming that the spi flash eeprom is connected to spi 1 hard block
       dat("(LIT)", 0xFF, "spi_rc0!"); // SPIRC0 = 0b11_111_111
@@ -840,6 +840,7 @@ export const minicore = (asm, opts) => {
                                       // fpga is master
                                       // spi mode is 3
                                       // most significant bit first
+                                      // spi chip select active
       dat("EXIT");
 
       def("spi1_wait_if_busy"); // ( -- )
@@ -877,8 +878,8 @@ export const minicore = (asm, opts) => {
       dat("0x0000", "spi_csr"); // deselect slave
       dat("EXIT");
     }
-    if (isDefined("instrset_uFork_SM2")) {
-      def("spi_flash_fastread"); // ( flash_upper_addr flash_lower_addr ucode_addr cells )
+    if (isDefined("instrset_uFork_SM2") || isDefined("instrset_uFork_SM2.2")) {
+      def("spi_flash_fastread_into_ucode"); // ( flash_upper_addr flash_lower_addr ucode_addr cells )
       dat(">R", ">R");           // ( flash_upper_addr flash_lower_addr ) R:( cells ucode_addr )
       dat("SWAP", "0xFF_&");     // ( flash_lower_addr flash_upper_addr ) R:( cells ucode_addr )
       dat("1", "spi1_start");    // assume that spi flash is at slave 0
@@ -904,7 +905,7 @@ export const minicore = (asm, opts) => {
       dat("spi1_end");
       dat("EXIT");
     }
-    if (isDefined("instrset_uFork_SM2.1")) {
+    if (isDefined("instrset_uFork_SM2.1") || isDefined("instrset_uFork_SM2.2")) {
       def("spi1_readcell"); // ( -- cell )
       dat("spi1_readbyte", "8LBR", "spi1_readbyte", "OR", "EXIT");
 
@@ -923,6 +924,12 @@ export const minicore = (asm, opts) => {
       I am looking at https://github.com/im-tomu/foboot/blob/master/doc/FLASHLAYOUT.md and I am guessing that the uFork fpga bitstream starts at 0x01a000 in the spi flash
       bitstream for the ice40up5k is 104250 bytes, so assume uFork rom+ram image start at 0x01a000 + 0x01973A ?
       0x03373A if my addition is right
+
+      image is
+        header
+        quad rom
+        quad ram
+        tbd: spram?
       */
       def("spi_flash_fastread_into_quads"); // ( flash_hi_addr flash_lo_addr start_quaddr nrOfQuads -- )
       dat(">R", ">R");                      // ( flash_hi_addr flash_lo_addr ) R:( nrOfQuads start_quaddr )
