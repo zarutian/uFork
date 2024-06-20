@@ -179,12 +179,15 @@ export const minicore = (asm, opts) => {
   dat("(CONST)", 0x0006);
 
   def("7");
+  def("0x7");
   dat("(CONST)", 0x0007);
 
   def("8");
+  def("0x8");
   dat("(CONST)", 0x0008);
 
   def("9");
+  def("0x9");
   dat("(CONST)", 0x0009);
 
   def("10");
@@ -800,8 +803,26 @@ export const minicore = (asm, opts) => {
         def("spi_rc0!"); // ( byte -- )
         dat("spi_rc0", "fomu_sysbus!", "EXIT");
         
-        def("spi_rc0@"); // ( -- byte )
-        dat("spi_rc0", "fomu_sysbus@", "EXIT");
+        def("spi_rc1!"); // ( byte -- )
+        dat("spi_rc1", "fomu_sysbus!", "EXIT");
+
+        def("spi_rc2!"); // ( byte -- )
+        dat("spi_rc2", "fomu_sysbus!", "EXIT");
+
+        def("spi_br!"); // ( byte -- )
+        dat("spi_br", "fomu_sysbus!", "EXIT");
+
+        def("spi_sr@"); // ( -- byte )
+        dat("spi_sr", "fomu_sysbus@", "EXIT");
+
+        def("spi_txdr!"); // ( byte -- )
+        dat("spi_txdr", "fomu_sysbus!", "EXIT");
+
+        def("spi_rxdr@"); // ( -- byte )
+        dat("spi_rxdr", "fomu_sysbus@", "EXIT");
+
+        def("spi_csr!"); // ( byte -- )
+        dat("spi_csr", "fomu_sysbus!", "EXIT");
       } else {
       }
     }
@@ -828,13 +849,13 @@ export const minicore = (asm, opts) => {
       dat("EXIT");
 
       def("spi1_wait_if_writebyte_not_ready"); // ( -- )
-      dat("(LIT)", 0x1C, "fomu_sysbus@");     // ( status_byte )
+      dat("spi_sr@");     // ( status_byte )
       dat("(LIT)", 0x10, "&");
       asm.macro.brnz("spi1_wait_if_writebyte_not_ready");
       dat("EXIT");
 
       def("spi1_wait_if_readbyte_not_ready"); // ( -- )
-      dat("(LIT)", 0x1C, "fomu_sysbus@");     // ( status_byte )
+      dat("spi_sr@");     // ( status_byte )
       dat("(LIT)", 0x08, "&");
       asm.macro.brnz("spi1_wait_if_readbyte_not_ready");
       dat("EXIT");
@@ -842,18 +863,18 @@ export const minicore = (asm, opts) => {
       def("spi1_readbyte"); // ( -- byte ) blocking read of incomming byte
       dat("spi1_wait_if_busy");
       dat("spi1_wait_if_readbyte_not_ready");
-      dat("(LIT)", 0x1E, "fomu_sysbus@");
+      dat("spi_rxdr@");
       dat("EXIT");
       
       def("spi1_writebyte"); // ( byte -- )
       dat("spi1_wait_if_busy");
       dat("spi1_wait_if_writebyte_not_ready");
-      dat("(LIT)", 0x1D, "fomu_sysbus!");
+      dat("spi_txdr!");
       dat("EXIT");
       
       def("spi1_end");
-      dat("0x0000", "(LIT)", 0x1F, "fomu_sysbus!"); // deselect slave
-      dat("0x0000", "(LIT)", 0x1A, "fomu_sysbus!"); // disable spi
+      dat("0x0000", "spi_rc2!"); // disable spi
+      dat("0x0000", "spi_csr"); // deselect slave
       dat("EXIT");
     }
     if (isDefined("instrset_uFork_SM2")) {
