@@ -778,12 +778,32 @@ export const minicore = (asm, opts) => {
       def("fomu_sysbus!"); // ( sysbus_databyte sysbus_addrbyte -- )
       dat("0xFF_&", "SWAP", "0xFF_&", "SWAP");
       dat("(LIT)", 0x0010, "io!", "(LIT)", 0x0011, "io!", "0xFF_&", "EXIT");
+    } else if (isDefined("instrset_uFork_SM2.2")) {
+      def("spi_isr",  "0x6");
+      def("spi_icr",  "0x7");
+      def("spi_rc0",  "0x8");
+      def("spi_rc1",  "0x9");
+      def("spi_rc2",  "0xA");
+      def("spi_br",   "0xB");
+      def("spi_sr",   "0xC");
+      def("spi_txdr", "0xD");
+      def("spi_rxdr", "0xE");
+      def("spi_csr",  "0xF");
+      if (isDefined("use_fomu_sysbus")) {
+        
+        
+        def("spirc0!"); // ( byte -- )
+        dat("(LIT)", 0x08, "fomu_sysbus!", "EXIT");
+        
+        def("spirc0@"); // ( -- byte )
+      } else {
+      }
     }
     if (isDefined("instrset_uFork_SM2") || isDefined("instrset_uFork_SM2.1")) {
       def("spi1_start"); // ( SlaveSelectMask -- )
       // asuming that the spi flash eeprom is connected to spi 1 hard block
-      dat("(LIT)", 0xFF, "(LIT)", 0x18, "fomu_sysbus!"); // SPIRC0 = 0b11_111_111
-                                                         //   most waits
+      dat("(LIT)", 0xFF, "spirc0!"); // SPIRC0 = 0b11_111_111
+                                     //   most waits
       dat("(LIT)", 0x80, "(LIT)", 0x19, "fomu_sysbus!"); // SPIRC1 = 0b1_0000000
                                                          // spi enabled
       dat("(LIT)", 0x86, "(LIT)", 0x1A, "fomu_sysbus!"); // SPIRC2
