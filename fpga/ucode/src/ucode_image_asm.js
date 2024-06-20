@@ -790,29 +790,35 @@ export const minicore = (asm, opts) => {
       def("spi_rxdr", "0xE");
       def("spi_csr",  "0xF");
       if (isDefined("use_fomu_sysbus")) {
+        def("fomu_sysbus@"); // ( sysbus_addrbyte -- sysbus_databyte )
+        dat("0xFF_&", "(LIT)", 0x010, "io!", "(LIT)", 0x0011, "io@", "0xFF_&", "EXIT");
+
+        def("fomu_sysbus!"); // ( sysbus_databyte sysbus_addrbyte -- )
+        dat("0xFF_&", "SWAP", "0xFF_&", "SWAP");
+        dat("(LIT)", 0x0010, "io!", "(LIT)", 0x0011, "io!", "0xFF_&", "EXIT");
         
+        def("spi_rc0!"); // ( byte -- )
+        dat("spi_rc0", "fomu_sysbus!", "EXIT");
         
-        def("spirc0!"); // ( byte -- )
-        dat("(LIT)", 0x08, "fomu_sysbus!", "EXIT");
-        
-        def("spirc0@"); // ( -- byte )
+        def("spi_rc0@"); // ( -- byte )
+        dat("spi_rc0", "fomu_sysbus@", "EXIT");
       } else {
       }
     }
     if (isDefined("instrset_uFork_SM2") || isDefined("instrset_uFork_SM2.1")) {
       def("spi1_start"); // ( SlaveSelectMask -- )
       // asuming that the spi flash eeprom is connected to spi 1 hard block
-      dat("(LIT)", 0xFF, "spirc0!"); // SPIRC0 = 0b11_111_111
-                                     //   most waits
-      dat("(LIT)", 0x80, "(LIT)", 0x19, "fomu_sysbus!"); // SPIRC1 = 0b1_0000000
-                                                         // spi enabled
-      dat("(LIT)", 0x86, "(LIT)", 0x1A, "fomu_sysbus!"); // SPIRC2
-                                                         // fpga is master
-                                                         // spi mode is 3
-                                                         // most significant bit first
-      dat("(LIT)", 0x3D, "(LIT)", 0x1B, "fomu_sysbus!"); // SPIBR = nearly slowest
-                                                         // 12 MHz / 60 = 200 KHz
-      dat("0xF_&", "(LIT)", 0x1F, "fomu_sysbus!");       // SPICSR
+      dat("(LIT)", 0xFF, "spi_rc0!"); // SPIRC0 = 0b11_111_111
+                                      //   most waits
+      dat("(LIT)", 0x80, "spi_rc1!"); // SPIRC1 = 0b1_0000000
+                                      // spi enabled
+      dat("(LIT)", 0x3D, "spi_br!");  // SPIBR = nearly slowest
+                                      // 12 MHz / 60 = 200 KHz
+      dat("0xF_&", "spi_csr!");       // SPICSR
+      dat("(LIT)", 0x86, "spi_rc2!"); // SPIRC2
+                                      // fpga is master
+                                      // spi mode is 3
+                                      // most significant bit first
       dat("EXIT");
 
       def("spi1_wait_if_busy"); // ( -- )
