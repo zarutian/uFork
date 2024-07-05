@@ -160,21 +160,22 @@
 0x40 CONSTANT '@'
 0x5B CONSTANT '['
 0x5D CONSTANT ']'
+0x70 CONSTANT 'p'
 0x71 CONSTANT 'q'
 0x72 CONSTANT 'r'
+0x7E CONSTANT '~'
 VARIABLE cmd    ( last command character read )
 VARIABLE inp    ( input data accumulator )
 VARIABLE tos    ( top of stack )
 VARIABLE nos    ( next on stack )
-VARIABLE copy   ( bulk copy mode )
-VARIABLE here   ( bulk copy addr )
+VARIABLE here   ( upload address )
 : push ( a -- )
     tos @ nos !
     tos ! ;
 : pop ( -- a )
     tos @
     nos @ tos ! ;
-: quad ( raw -- addr )
+: quad ( raw -- qaddr )
     DUP MSB& IF
         0x0FFF AND          ( uCode | fixnum )
     ELSE
@@ -185,16 +186,17 @@ VARIABLE here   ( bulk copy addr )
             0x7FFC AND MSB|
         THEN
     THEN ;
-: parse_qaddr ( qaddr -- field offset )
+: parse_qaddr ( qaddr -- field raw )
         DUP 0x3 AND SWAP    ( D: field addr )
         DUP MSB& IF
-            2ASR 0x1FFF
+            2ASR 0x1FFF AND
         ELSE
-            2ASR 0x0FFF
-        THEN AND ;          ( D: field offset )
+            2ASR 0x0FFF AND
+            0x4000 OR
+        THEN ;              ( D: field raw )
 : fetch ( addr -- data )
     DUP 0xC000 AND IF
-        parse_qaddr         ( D: field offset )
+        parse_qaddr         ( D: field raw )
         OVER 0x1 = IF
             QX@             ( D: field data )
         ELSE
@@ -214,7 +216,7 @@ VARIABLE here   ( bulk copy addr )
     THEN ;
 : store ( data addr -- )
     DUP 0xC000 AND IF
-        parse_qaddr SWAP    ( D: data offset field )
+        parse_qaddr SWAP    ( D: data raw field )
         DUP 0x1 = IF
             DROP QX!
         ELSE
@@ -273,10 +275,36 @@ VARIABLE here   ( bulk copy addr )
         '\b' EMIT BL EMIT '\b' EMIT
     THEN DROP ;
 : eol ( begin -- end )
-    ( copy @ CALLZ ) EMIT
-    KEY
+    ( EMIT ) KEY
     DUP '\r' = SKZ EXIT
     eol ;
+: upload ( cmd' key' -- cmd key )
+    2DROP                   ( D: -- )
+    KEY                     ( D: key )
+    DUP '/' XOR CALLZ eol   ( comment to EOL )
+    cmd @ SWAP              ( D: cmd key )
+    DUP BL <= IF
+        OVER ISHEX IF
+            here @ 0xF AND NOT IF
+                '~' EMIT    ( show upload progress )
+            THEN
+            inp @ >here
+        THEN
+        OVER ']' = IF       ( end of upload )
+            here @ push
+            DUP ECHO
+            EXIT
+        THEN
+        0 inp !             ( clear input accum )
+    THEN
+    DUP ISHEX IF
+        DUP >inp            ( add digit to accum )
+    THEN
+    DUP ']' = IF
+        DUP EMIT
+    THEN
+    DUP cmd !               ( key -> cmd )
+    upload ;
 : MONITOR
     KEY                     ( D: key )
     DUP ^C = SKZ EXIT       ( abort! )
@@ -284,44 +312,36 @@ VARIABLE here   ( bulk copy addr )
         DROP DEL
     THEN
     DUP DEL XOR CALLZ del   ( delete previous )
-    DUP '/' XOR CALLZ eol   ( comment to EOL )
     DUP ECHO
     cmd @ SWAP              ( D: cmd key )
     ( '<' EMIT OVER X. '.' EMIT DUP X. '>' EMIT )
     DUP BL <= IF
-        copy @ IF
-            OVER ISHEX IF
-                inp @ >here
-            THEN
-            OVER ']' = IF
-                FALSE copy !
-            THEN
-        ELSE
-            OVER ISHEX IF
-                inp @ push
-            THEN
-            OVER '@' = IF
-                pop fetch push
-            THEN
-            OVER '.' = IF
-                pop X. CR
-            THEN
-            OVER '!' = IF
-                pop pop SWAP store
-            THEN
-            OVER 'q' = IF
-                pop quad push
-            THEN
-            OVER '?' = IF
-                pop pop SWAP dump
-            THEN
-            OVER '[' = IF
-                pop here !
-                TRUE copy !
-            THEN
-            OVER 'r' = IF
-                pop EXECUTE
-            THEN
+        OVER ISHEX IF
+            inp @ push
+        THEN
+        OVER '@' = IF
+            pop fetch push
+        THEN
+        OVER '.' = IF
+            pop X. CR
+        THEN
+        OVER '!' = IF
+            pop pop SWAP store
+        THEN
+        OVER 'q' = IF
+            pop quad push
+        THEN
+        OVER 'p' = IF
+            pop parse_qaddr SWAP push push
+        THEN
+        OVER '?' = IF
+            pop pop SWAP dump
+        THEN
+        OVER '[' = IF
+            pop here ! upload
+        THEN
+        OVER 'r' = IF
+            pop EXECUTE
         THEN
         0 inp !             ( clear input accum )
         DUP '\r' = IF
@@ -329,7 +349,7 @@ VARIABLE here   ( bulk copy addr )
         THEN
     THEN
     DUP ISHEX IF
-        DUP >inp
+        DUP >inp            ( add digit to accum )
     THEN
     DUP DEL = IF
         2DROP
