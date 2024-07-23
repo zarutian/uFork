@@ -3,6 +3,7 @@
 )
 
 : PANIC! FAIL PANIC! ;      ( if BOOT returns... )
+: TODO 0x00AF , PANIC! ;    ( alternative HALT... )
 
 0x03 CONSTANT ^C
 0x08 CONSTANT '\b'
@@ -187,6 +188,19 @@
   0x0006 ,    0x8003 ,    0x0000 ,    0x0000 ,    ( ^000D   #dict_t     )
   0x0006 ,    0xFFFF ,    0x0000 ,    0x0000 ,    ( ^000E   FWD_REF_T   )
   0x0006 ,    0x8000 ,    0x0000 ,    0x0000 ,    ( ^000F   FREE_T      )
+  0x000B ,    0x8018 ,    0x8001 ,    0x0011 ,    ( ^0010   msg 1       )
+  0x000B ,    0x801A ,    0xFFFF ,    0x0012 ,    ( ^0011   send -1     )
+  0x000B ,    0x800F ,    0x8001 ,    0x0000 ,    ( ^0012   end commit  )
+
+(
+cust_send:                  ; msg
+    msg 1                   ; msg cust
+send_msg:                   ; msg cust
+    send -1                 ; --
+sink_beh:                   ; _ <- _
+commit:
+    end commit
+)
 
 ( 0x0000 CONSTANT #?          ( undefined ) ... ucode.js )
 ( 0x0001 CONSTANT #nil        ( empty list ) ... ucode.js )
@@ -205,8 +219,10 @@
 0x000E CONSTANT FWD_REF_T   ( GC "broken heart" )
 0x000F CONSTANT FREE_T      ( GC free quad )
 
+0x8001 CONSTANT #1          ( fixnum one )
 ( : #0                        ( fixnum zero ) ... ucode.js )
 0x8000 CONSTANT E_OK        ( not an error )
+( : #-1                       ( fixnum negative one ) ... ucode.js )
 0xFFFF CONSTANT E_FAIL      ( general failure )
 0xFFFE CONSTANT E_BOUNDS    ( out of bounds )
 0xFFFD CONSTANT E_NO_MEM    ( no memory available )
@@ -223,8 +239,10 @@
 0xFFF2 CONSTANT E_ASSERT    ( assertion failed )
 0xFFF1 CONSTANT E_STOP      ( actor stopped )
 
-: signal ( error -- )
-    FAIL signal ;
+: invalid ( -- )
+    E_FAIL
+: disrupt ( reason -- )
+    FAIL disrupt ;
 : quad ( raw -- qaddr )
     DUP MSB& IF
         0x0FFF AND          ( uCode | fixnum )
@@ -291,18 +309,6 @@
     AGAIN
     2DROP ;
 
-(
-Type checking can produce the following errors:
-
-0xFFFC CONSTANT E_NOT_FIX   ( fixnum required )
-0xFFFB CONSTANT E_NOT_CAP   ( capability required )
-0xFFFA CONSTANT E_NOT_PTR   ( memory pointer required )
-0xFFF9 CONSTANT E_NOT_ROM   ( ROM pointer required )
-0xFFF8 CONSTANT E_NOT_RAM   ( RAM pointer required )
-0xFFF7 CONSTANT E_NOT_EXE   ( instruction required )
-0xFFF6 CONSTANT E_NO_TYPE   ( type required )
-)
-
 ( : is_fix ( raw -- truthy )
     MSB& ; ... ucode.js )
 : is_cap ( raw -- bool )
@@ -313,6 +319,25 @@ Type checking can produce the following errors:
     0xE000 AND 0x4000 = ;   ( excludes ocaps )
 : is_rom ( raw -- bool )
     0xC000 AND 0= ;
+
+: is_pair ( raw -- bool )
+    DUP is_ptr IF
+        QT@ #pair_t = ;
+    THEN DROP FALSE ;
+: typeq ( raw typ -- truthy )
+    DUP #fixnum_t = IF
+        DROP is_fix ;
+    THEN
+    DUP #actor_t = IF
+        DROP is_cap ;
+    THEN
+    2DUP SWAP QT@ = IF
+        PROXY_T = IF        ( D: raw )
+            is_cap ;
+        THEN
+        is_ptr ;
+    THEN
+    2DROP FALSE ;
 
 ( : int2fix ( num -- raw )
     MSB| ; ... ucode.js )
@@ -346,14 +371,14 @@ Type checking can produce the following errors:
     q_ek_queues QT@ ;
 : e_tail@ ( -- data )
     q_ek_queues QX@ ;
-: k_head@ ( -- data )
-    q_ek_queues QY@ ;
-: k_tail@ ( -- data )
-    q_ek_queues QZ@ ;
 : e_head! ( data -- )
     q_ek_queues QT! ;
 : e_tail! ( data -- )
     q_ek_queues QX! ;
+: k_head@ ( -- data )
+    q_ek_queues QY@ ;
+: k_tail@ ( -- data )
+    q_ek_queues QZ@ ;
 : k_head! ( data -- )
     q_ek_queues QY! ;
 : k_tail! ( data -- )
@@ -377,25 +402,100 @@ Type checking can produce the following errors:
 : spn_signal! ( data sponsor -- )
     QZ! ;
 
-: reserve ( -- qref )
-    ( TODO: check free-list first ... )
-    mem_top@ DUP 0x5000 >= IF
-        E_NO_MEM signal ;
+: event_enqueue ( event -- )
+    #nil OVER QZ!
+    e_head@ is_ram IF
+        DUP e_tail@ QZ!
+    ELSE
+        DUP e_head!
     THEN
-    #? OVER QT!
-    #? OVER QX!
-    #? OVER QY!
-    #? OVER QZ!
-    DUP 1+ mem_top! ;
+    e_tail! ;
+: event_dequeue ( -- event | #nil )
+    e_head@ DUP is_ram IF
+        DUP QZ@             ( D: event next )
+        DUP e_head!
+        is_ram NOT IF
+            #nil e_tail!
+        THEN                ( D: event )
+    THEN ;
+
+: cont_enqueue ( cont -- )
+    #nil OVER QZ!
+    k_head@ is_ram IF
+        DUP k_tail@ QZ!
+    ELSE
+        DUP k_head!
+    THEN
+    k_tail! ;
+: cont_dequeue ( -- cont | #nil )
+    k_head@ DUP is_ram IF
+        DUP QZ@             ( D: cont next )
+        DUP k_head!
+        is_ram NOT IF
+            #nil k_tail!
+        THEN                ( D: cont )
+    THEN ;
+
+: ip@
+    k_head@ QT@ ;
+: sp@
+    k_head@ QX@ ;
+: ep@
+    k_head@ QY@ ;
+: kp@
+    k_head@ QZ@ ;
+: ip!
+    k_head@ QT! ;
+: sp!
+    k_head@ QX! ;
+: ep!
+    k_head@ QY! ;
+
+: reserve ( -- qref )
+    mem_next@ DUP #nil XOR IF
+        mem_free@ 1- mem_free!
+        DUP QZ@ mem_next! ;
+    THEN DROP
+    mem_top@ DUP 0x5000 < IF
+        DUP 1+ mem_top! ;
+    THEN
+    E_NO_MEM disrupt ;
+: release ( qref -- )
+    FREE_T OVER QT!
+    ( #? OVER QX! #? OVER QY! )
+    mem_next@ OVER QZ! mem_next!
+    mem_free@ 1+ mem_free! ;
+: 0alloc ( T -- qref )
+    reserve >R              ( D: T ) ( R: qref )
+    R@ QT!                  ( D: ) ( R: qref )
+    #? R@ QX!               ( D: ) ( R: qref )
+: _clear2
+    #? R@ QY!               ( D: ) ( R: qref )
+: _clear1
+    #? R@ QZ!               ( D: ) ( R: qref )
+: _clear0
+    R> ;                    ( D: qref ) ( R: )
+: 1alloc ( X T -- qref )
+    reserve >R              ( D: X T ) ( R: qref )
+    R@ QT!                  ( D: X ) ( R: qref )
+    R@ QX!                  ( D: ) ( R: qref )
+    _clear2 ;
+: 2alloc ( Y X T -- qref )
+    reserve >R              ( D: Y X T ) ( R: qref )
+    R@ QT!                  ( D: Y X ) ( R: qref )
+    R@ QX!                  ( D: Y ) ( R: qref )
+    R@ QY!                  ( D: ) ( R: qref )
+    _clear1 ;
+: 3alloc ( Z Y X T -- qref )
+    reserve >R              ( D: Z Y X T ) ( R: qref )
+    R@ QT!                  ( D: Z Y X ) ( R: qref )
+    R@ QX!                  ( D: Z Y ) ( R: qref )
+    R@ QY!                  ( D: Z ) ( R: qref )
+    R@ QZ!                  ( D: ) ( R: qref )
+    _clear0 ;
+
 : cons ( cdr car -- pair )
-    reserve #pair_t         ( D: cdr car pair #pair_t )
-    OVER QT!                ( D: cdr car pair )
-    TUCK QX!                ( D: cdr pair )
-    TUCK QY! ;              ( D: pair )
-: is_pair ( raw -- bool )
-    DUP is_ptr IF
-        QT@ #pair_t = ;
-    THEN DROP FALSE ;
+    #pair_t 2alloc ;
 : car ( pair -- first )
     DUP is_pair IF
         QX@ ;
@@ -408,21 +508,6 @@ Type checking can produce the following errors:
     DUP is_pair IF
         DUP QY@ SWAP QX@ ;
     THEN DROP #? DUP ;
-
-: typeq ( raw typ -- truthy )
-    DUP #fixnum_t = IF
-        DROP is_fix ;
-    THEN
-    DUP #actor_t = IF
-        DROP is_cap ;
-    THEN
-    2DUP SWAP QT@ = IF
-        PROXY_T = IF        ( D: raw )
-            is_cap ;
-        THEN
-        is_ptr ;
-    THEN
-    2DROP FALSE ;
 
 (
 
@@ -485,6 +570,109 @@ To Copy fixnum:n of list onto head:
         Let n become n-1
 )
 
+(
+Type checking can produce the following errors:
+
+0xFFFC CONSTANT E_NOT_FIX   ( fixnum required )
+0xFFFB CONSTANT E_NOT_CAP   ( capability required )
+0xFFFA CONSTANT E_NOT_PTR   ( memory pointer required )
+0xFFF9 CONSTANT E_NOT_ROM   ( ROM pointer required )
+0xFFF8 CONSTANT E_NOT_RAM   ( RAM pointer required )
+0xFFF7 CONSTANT E_NOT_EXE   ( instruction required )
+0xFFF6 CONSTANT E_NO_TYPE   ( type required )
+)
+
+: perform_op JMPTBL 32 ,    ( opcode -- ip | error )
+    invalid                 ( 0x8000: debug )
+    invalid                 ( 0x8001: jump )
+    invalid                 ( 0x8002: push )
+    invalid                 ( 0x8003: if )
+    invalid                 ( 0x8004: -unused- )
+    invalid                 ( 0x8005: typeq )
+    invalid                 ( 0x8006: eq )
+    invalid                 ( 0x8007: assert )
+
+    invalid                 ( 0x8008: sponsor )
+    invalid                 ( 0x8009: quad )
+    invalid                 ( 0x800A: dict )
+    invalid                 ( 0x800B: deque )
+    invalid                 ( 0x800C: my )
+    invalid                 ( 0x800D: alu )
+    invalid                 ( 0x800E: cmp )
+    invalid                 ( 0x800F: end )
+
+    invalid                 ( 0x8010: -unused- )
+    invalid                 ( 0x8011: pair )
+    invalid                 ( 0x8012: part )
+    invalid                 ( 0x8013: nth )
+    invalid                 ( 0x8014: pick )
+    invalid                 ( 0x8015: roll )
+    invalid                 ( 0x8016: dup )
+    invalid                 ( 0x8017: drop )
+
+    invalid                 ( 0x8018: msg )
+    invalid                 ( 0x8019: state )
+    invalid                 ( 0x801A: send )
+    invalid                 ( 0x801B: signal )
+    invalid                 ( 0x801C: new )
+    invalid                 ( 0x801D: beh )
+    invalid                 ( 0x801E: -unused- )
+    invalid                 ( 0x801F: -unused- )
+
+    DROP invalid ;          ( default case )
+
+: dispatch_event ( -- )
+    event_dequeue           ( D: event )
+    DUP QX@ QZ@ IF          ( D: event )
+        ( target busy )
+        event_enqueue ;
+    THEN                    ( D: event )
+    #nil OVER QZ!
+    DUP QX@ >R              ( D: event ) ( R: target )
+    #nil R@ QX@             ( D: ep sp ip ) ( R: target )
+    2alloc                  ( D: cont ) ( R: target )
+    #nil R@ QY@ R@ QX@      ( D: cont event data code ) ( R: target )
+    #actor_t 3alloc         ( D: cont effect ) ( R: target )
+    R> QZ!                  ( D: cont )
+    cont_enqueue ;
+
+: run_exit ( limit -- )
+    DROP ;                  ( FIXME: may want to return the remaining limit... )
+VARIABLE saved_sp           ( sp before instruction execution )
+: run_loop ( limit -- )
+    #? q_root_spn spn_signal!
+    k_head@ is_ram IF
+        ( execute instruction )
+        sp@ saved_sp !
+        ip@ DUP #instr_t typeq IF
+            QT@ DUP is_fix IF
+                fix2int perform_op
+                DUP is_fix IF
+                    saved_sp @ sp!
+                    q_root_spn spn_signal! run_exit ;
+                THEN
+                ip!         ( update ip in continuation )
+                cont_dequeue
+                cont_enqueue
+            THEN
+        THEN
+        e_head@ is_ram IF
+            dispatch_event
+        THEN
+    ELSE
+        e_head@ is_ram IF
+            dispatch_event
+        ELSE
+            #0 q_root_spn spn_signal! run_exit ;
+        THEN
+    THEN
+    DUP 0> IF
+        1- DUP 0= IF
+            run_exit ;
+        THEN
+    THEN
+    run_loop ;
+
 : ufork_init
     0x8000 rom_image 64 memcpy
     0x4010 mem_top!
@@ -520,7 +708,8 @@ To Copy fixnum:n of list onto head:
     mem_free@ ( 0 int2fix ) #0 =assert
     mem_next@ #nil =assert
     e_head@ #nil =assert
-    k_head@ #nil =assert ;
+    k_head@ #nil =assert
+    EXIT
 
 : cons_test
     #nil #f cons #t cons
@@ -528,40 +717,47 @@ To Copy fixnum:n of list onto head:
     cdr
     part #f =assert
     DUP #nil =assert
-    cdr #? =assert ;
+    cdr #? =assert
+    EXIT
 
-(
-    #[test]
-    fn core_initialization() {
-        let core = Core::default();
-        assert_eq!(ZERO, core.ram_free());
-        assert_eq!(NIL, core.ram_next());
-        assert_eq!(NIL, core.e_first());
-        assert_eq!(NIL, core.k_first());
-        assert_eq!(UNDEF, core.kp());
-    }
+: alloc_test
+    mem_top@                ( D: top_before )
+    #-1 #0 #pair_t 2alloc   ( D: top_before 1st )
+    DUP QT@ #pair_t =assert
+    DUP QX@ #0 =assert
+    DUP QY@ #-1 =assert
+    DUP QZ@ #? =assert
+    is_ptr assert
+    0x2222 0x1111 cons      ( D: top_before 2nd )
+    0x4444 0x3333 cons      ( D: top_before 2nd 3rd )
+    SWAP release release    ( D: top_before )
+    0x6666 0x5555 cons      ( D: top_before 4th )
+    DROP                    ( D: top_before )
+    mem_top@                ( D: top_before top_after )
+    SWAP - 3 =assert
+    mem_free@ #1 =assert
+    EXIT
 
-    #[test]
-    fn basic_memory_allocation() {
-        let mut core = Core::default();
-        let top_before = core.ram_top().ofs();
-        let m1 = core.reserve(&Quad::pair_t(PLUS_1, PLUS_1)).unwrap();
-        assert!(m1.is_ptr());
-        let m2 = core.reserve(&Quad::pair_t(PLUS_2, PLUS_2)).unwrap();
-        let m3 = core.reserve(&Quad::pair_t(PLUS_3, PLUS_3)).unwrap();
-        core.release(m2);
-        core.release(m3);
-        let _m4 = core.reserve(&Quad::pair_t(PLUS_4, PLUS_4)).unwrap();
-        let top_after = core.ram_top().ofs();
-        assert_eq!(3, top_after - top_before);
-        assert_eq!(PLUS_1, core.ram_free());
-    }
-)
+: queue_test
+    #nil 0x6002 q_root_spn 2alloc
+    DUP event_enqueue
+    DUP e_head@ =assert
+    DUP e_tail@ =assert
+    #unit 0x600E q_root_spn 2alloc
+    DUP event_enqueue
+    OVER e_head@ =assert
+    DUP e_tail@ =assert
+    SWAP event_dequeue =assert
+    event_dequeue =assert
+    #nil event_dequeue =assert
+    EXIT
 
 : test_suite
     ufork_init
     ufork_init_test
     cons_test
+    alloc_test
+    queue_test
     EXIT
 
 ( Debugging Monitor )
@@ -727,4 +923,4 @@ VARIABLE here   ( upload address )
 
 ( WARNING! if BOOT returns we PANIC! )
 : BOOT
-    ECHOLOOP test_suite prompt MONITOR ;
+    ( ECHOLOOP ) test_suite prompt MONITOR ;
