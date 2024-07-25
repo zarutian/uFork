@@ -23,7 +23,7 @@
 0x7F CONSTANT DEL
 
 : @EXECUTE
-    @
+    @                       ( fallthrough to next definition )
 : EXECUTE
     0x0FFF AND >R
 : (EXIT)
@@ -48,7 +48,7 @@
         NEGATE
     THEN ;
 : BOOL ( truthy -- bool )
-    IF TRUE ;
+    IF TRUE ;               ( optimize early exit )
     THEN FALSE ;
 : = ( a b -- a==b )
     XOR
@@ -170,7 +170,7 @@
     AGAIN DROP ;
 
 ( uFork Virtual Machine )
-: rom_image DATA            ( 16 x 4 cells )
+: rom_image DATA            ( 16+4 x 4 cells )
 (   T           X           Y           Z           VALUE   NAME        )
   0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0000   #?          )
   0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0001   #nil        )
@@ -191,6 +191,7 @@
   0x000B ,    0x8018 ,    0x8001 ,    0x0011 ,    ( ^0010   msg 1       )
   0x000B ,    0x801A ,    0xFFFF ,    0x0012 ,    ( ^0011   send -1     )
   0x000B ,    0x800F ,    0x8001 ,    0x0000 ,    ( ^0012   end commit  )
+  0x000B ,    0x800F ,    0x8000 ,    0x0000 ,    ( ^0013   end stop    )
 
 (
 cust_send:                  ; msg
@@ -200,6 +201,8 @@ send_msg:                   ; msg cust
 sink_beh:                   ; _ <- _
 commit:
     end commit
+stop:
+    end stop
 )
 
 ( 0x0000 CONSTANT #?          ( undefined ) ... ucode.js )
@@ -451,6 +454,20 @@ commit:
 : ep!
     k_head@ QY! ;
 
+: op@
+    ip@ QX@ ;
+: imm@
+    ip@ QY@ ;
+: k@
+    ip@ QZ@ ;
+
+: sponsor@
+    ep@ QT@ ;
+: self@
+    ep@ QX@ ;
+: msg@
+    ep@ QY@ ;
+
 : reserve ( -- qref )
     mem_next@ DUP #nil XOR IF
         mem_free@ 1- mem_free!
@@ -570,6 +587,50 @@ To Copy fixnum:n of list onto head:
         Let n become n-1
 )
 
+: op_end ( -- ip | error )
+    imm@ #1 = IF
+        self@ DUP QZ@       ( D: self effect )
+        DUP QZ@             ( D: self effect events )
+        BEGIN               ( D: self effect events )
+            DUP is_ram
+        WHILE               ( D: self effect events )
+            DUP QZ@         ( D: self effect event events' )
+            SWAP event_enqueue
+        REPEAT              ( D: self effect events )
+        DROP SWAP           ( D: effect self )
+        OVER QX@ OVER QX!   ( update code )
+        OVER QY@ OVER QY!   ( update data )
+        #? SWAP QZ!         ( make actor ready )
+        release             ( free effect )
+        k@ ;
+    THEN
+    imm@ #0 = IF
+        E_STOP ;
+    THEN
+    E_BOUNDS ;
+
+(
+Add sent message-events to the message-queue
+Update the current actor's state and behavior
+Make actor ready for the next event
+Discard the current event
+
+    fn actor_commit(&mut self, me: Any) {
+        self.stack_clear(NIL);
+        let effect = self.ram(me).z();
+        let quad = self.ram(effect);
+        let beh = quad.x();
+        let state = quad.y();
+        self.event_commit(quad.z());
+        self.free(effect);
+        // commit actor transaction
+        let actor = self.ram_mut(me);
+        actor.set_x(beh);
+        actor.set_y(state);
+        actor.set_z(UNDEF);
+    }
+)
+
 (
 Type checking can produce the following errors:
 
@@ -599,7 +660,7 @@ Type checking can produce the following errors:
     invalid                 ( 0x800C: my )
     invalid                 ( 0x800D: alu )
     invalid                 ( 0x800E: cmp )
-    invalid                 ( 0x800F: end )
+    op_end                  ( 0x800F: end )
 
     invalid                 ( 0x8010: -unused- )
     invalid                 ( 0x8011: pair )
@@ -636,25 +697,35 @@ Type checking can produce the following errors:
     R> QZ!                  ( D: cont )
     cont_enqueue ;
 
-: run_exit ( limit -- )
-    DROP ;                  ( FIXME: may want to return the remaining limit... )
+VARIABLE run_limit          ( number of iterations remaining )
 VARIABLE saved_sp           ( sp before instruction execution )
 : run_loop ( limit -- )
+    run_limit !
     #? q_root_spn spn_signal!
     k_head@ is_ram IF
         ( execute instruction )
         sp@ saved_sp !
         ip@ DUP #instr_t typeq IF
-            QT@ DUP is_fix IF
+            QX@ DUP is_fix IF
                 fix2int perform_op
                 DUP is_fix IF
                     saved_sp @ sp!
-                    q_root_spn spn_signal! run_exit ;
+                    q_root_spn spn_signal! ;
+                THEN        ( D: ip' )
+                #instr_t typeq IF
+                    ip!     ( update ip in continuation )
+                    cont_dequeue
+                    cont_enqueue
+                ELSE        ( free terminated cont & event )
+                    cont_dequeue
+                    DUP QY@ ( D: cont event )
+                    release release
                 THEN
-                ip!         ( update ip in continuation )
-                cont_dequeue
-                cont_enqueue
+            ELSE            ( D: op )
+                E_BOUNDS q_root_spn spn_signal! ;
             THEN
+        ELSE                ( D: ip )
+            E_NOT_EXE q_root_spn spn_signal! ;
         THEN
         e_head@ is_ram IF
             dispatch_event
@@ -663,18 +734,20 @@ VARIABLE saved_sp           ( sp before instruction execution )
         e_head@ is_ram IF
             dispatch_event
         ELSE
-            #0 q_root_spn spn_signal! run_exit ;
+            E_OK q_root_spn spn_signal! ;
         THEN
     THEN
-    DUP 0> IF
+    run_limit @ DUP 0> IF
         1- DUP 0= IF
-            run_exit ;
+            DROP ;
         THEN
     THEN
     run_loop ;
 
 : ufork_init
-    0x8000 rom_image 64 memcpy
+    0x8000 rom_image
+    16 4 +                  ( reserved rom + program )
+    4 * memcpy              ( x quads )
     0x4010 mem_top!
     #nil mem_next!
     #0 mem_free!
@@ -753,12 +826,17 @@ VARIABLE saved_sp           ( sp before instruction execution )
     EXIT
 
 : test_suite
-    ufork_init
     ufork_init_test
     cons_test
     alloc_test
     queue_test
     EXIT
+
+: ufork_boot
+    #nil 0x0012 #actor_t 2alloc ptr2cap
+    #unit SWAP q_root_spn 2alloc
+    event_enqueue
+    0 run_loop ;
 
 ( Debugging Monitor )
 0x21 CONSTANT '!'
@@ -923,4 +1001,8 @@ VARIABLE here   ( upload address )
 
 ( WARNING! if BOOT returns we PANIC! )
 : BOOT
-    ( ECHOLOOP ) test_suite prompt MONITOR ;
+    ( ECHOLOOP )
+    ufork_init
+    ( test_suite )
+    ufork_boot TODO
+    prompt MONITOR ;
