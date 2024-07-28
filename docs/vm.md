@@ -1057,7 +1057,7 @@ Discard items from the stack.
  `#instr_t`   | `+23` (drop)  | _n_         | _instr_
 
  1. While _n_ > 0
-    1. Remove from the stack
+    1. Remove top item from the stack
     1. Let _n_ become `n-1`
 
 #### `dup` instruction
@@ -1092,7 +1092,7 @@ and the processing "thread" ends.
 
  T            | X (op)        | Y (imm)       | Z (k)
 --------------|---------------|---------------|-------------
- `#instr_t`   | `+15` (end)   | `-1` (abort)  | —
+ `#instr_t`   | `+15` (end)   | `-1` (abort)  | `#?`
 
  1. Remove _reason_ from the stack
  1. Record/report _reason_ to system-specific log or debugger
@@ -1101,13 +1101,13 @@ and the processing "thread" ends.
 
  T            | X (op)        | Y (imm)       | Z (k)
 --------------|---------------|---------------|-------------
- `#instr_t`   | `+15` (end)   | `+0` (stop)   | —
+ `#instr_t`   | `+15` (end)   | `+0` (stop)   | `#?`
 
  1. Signal an `E_STOP` error
 
  T            | X (op)        | Y (imm)       | Z (k)
 --------------|---------------|---------------|-------------
- `#instr_t`   | `+15` (end)   | `+1` (commit) | —
+ `#instr_t`   | `+15` (end)   | `+1` (commit) | `#?`
 
  1. Update the current actor's state and behavior
  1. Add sent message-events to the message-queue
