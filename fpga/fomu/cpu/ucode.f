@@ -169,69 +169,66 @@
     AGAIN DROP ;
 
 ( uFork Virtual Machine )
-: rom_image DATA            ( 16+34 x 4 cells )
-(   T           X           Y           Z           VALUE   NAME        )
-  0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0000   #?          )
-  0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0001   #nil        )
-  0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0002   #f          )
-  0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0003   #t          )
-  0x0000 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0004   #unit       )
-  0x000C ,    0x0001 ,    0x0001 ,    0x0000 ,    ( ^0005   EMPTY_DQ    )
-  0x0006 ,    0x8001 ,    0x0000 ,    0x0000 ,    ( ^0006   #type_t     )
-  0x0006 ,    0x0000 ,    0x0000 ,    0x0000 ,    ( ^0007   #fixnum_t   )
-  0x0006 ,    0x8002 ,    0x0000 ,    0x0000 ,    ( ^0008   #actor_t    )
-  0x0006 ,    0x8002 ,    0x0000 ,    0x0000 ,    ( ^0009   PROXY_T     )
-  0x0006 ,    0x8002 ,    0x0000 ,    0x0000 ,    ( ^000A   STUB_T      )
-  0x0006 ,    0x8003 ,    0x0000 ,    0x0000 ,    ( ^000B   #instr_t    )
-  0x0006 ,    0x8002 ,    0x0000 ,    0x0000 ,    ( ^000C   #pair_t     )
-  0x0006 ,    0x8003 ,    0x0000 ,    0x0000 ,    ( ^000D   #dict_t     )
-  0x0006 ,    0xFFFF ,    0x0000 ,    0x0000 ,    ( ^000E   FWD_REF_T   )
-  0x0006 ,    0x8000 ,    0x0000 ,    0x0000 ,    ( ^000F   FREE_T      )
-(
-cust_send:                  ; msg
-    msg 1                   ; msg cust
-send_msg:                   ; msg cust
-    send -1                 ; --
-sink_beh:                   ; _ <- _
-commit:
-    end commit
-stop:
-    end stop
-)
-  0x000B ,    0x8018 ,    0x8001 ,    0x0011 ,    ( ^0010   msg 1       )
-  0x000B ,    0x801A ,    0xFFFF ,    0x0012 ,    ( ^0011   send -1     )
-  0x000B ,    0x800F ,    0x8001 ,    0x0000 ,    ( ^0012   end commit  )
-  0x000B ,    0x800F ,    0x8000 ,    0x0000 ,    ( ^0013   end stop    )
-  0x000B ,    0x8011 ,    0x8000 ,    0x0015 ,    ( ^0014   pair 0      )
-  0x000B ,    0x8007 ,    0x0001 ,    0x0016 ,    ( ^0015   assert #nil )
-  0x000B ,    0x8002 ,    0x8003 ,    0x0017 ,    ( ^0016   push 3      )
-  0x000B ,    0x8002 ,    0x8002 ,    0x0018 ,    ( ^0017   push 2      )
-  0x000B ,    0x8011 ,    0x8001 ,    0x0019 ,    ( ^0018   pair 1      )
-  0x000B ,    0x8002 ,    0x8001 ,    0x001A ,    ( ^0019   push 1      )
-  0x000B ,    0x8011 ,    0x8001 ,    0x001B ,    ( ^001A   pair 1      )
-  0x000B ,    0x8012 ,    0x8001 ,    0x001C ,    ( ^001B   part 1      )
-  0x000B ,    0x8007 ,    0x8001 ,    0x001D ,    ( ^001C   assert 1    )
-  0x000B ,    0x8016 ,    0x8000 ,    0x001E ,    ( ^001D   dup 0       )
-  0x000B ,    0x8012 ,    0x8001 ,    0x001F ,    ( ^001E   part 1      )
-  0x000B ,    0x8007 ,    0x8002 ,    0x0020 ,    ( ^001F   assert 2    )
-  0x000B ,    0x8016 ,    0x8001 ,    0x0021 ,    ( ^0020   dup 1       )
-  0x000B ,    0x8007 ,    0x8003 ,    0x0022 ,    ( ^0021   assert 3    )
-  0x000B ,    0x8017 ,    0x8000 ,    0x0023 ,    ( ^0022   drop 0      )
-  0x000B ,    0x8012 ,    0x8001 ,    0x0024 ,    ( ^0023   part 1      )
-  0x000B ,    0x8017 ,    0x8001 ,    0x0025 ,    ( ^0024   drop 1      )
-  0x000B ,    0x8003 ,    0x0013 ,    0x0026 ,    ( ^0025   [#?] if     )
-  0x000B ,    0x8002 ,    0x8000 ,    0x0027 ,    ( ^0026   push 0      )
-  0x000B ,    0x8006 ,    0x8000 ,    0x0028 ,    ( ^0027   eq 0        )
-  0x000B ,    0x8003 ,    0x0029 ,    0x0013 ,    ( ^0028   [#t] if     )
-  0x000B ,    0x8002 ,    0xFFFF ,    0x002A ,    ( ^0029   push -1     )
-  0x000B ,    0x8006 ,    0x8000 ,    0x002B ,    ( ^002A   eq 0        )
-  0x000B ,    0x8003 ,    0x0013 ,    0x002C ,    ( ^002B   [#f] if     )
-  0x000B ,    0x8002 ,    0x0001 ,    0x002D ,    ( ^002C   push #nil   )
-  0x000B ,    0x8003 ,    0x0013 ,    0x002E ,    ( ^002D   [#nil] if   )
-  0x000B ,    0x8002 ,    0x0004 ,    0x002F ,    ( ^002E   push #unit  )
-  0x000B ,    0x8003 ,    0x0030 ,    0x0013 ,    ( ^002F   [#unit] if  )
-  0x000B ,    0x8002 ,    0x8000 ,    0x0031 ,    ( ^0030   push #0     )
-  0x000B ,    0x8003 ,    0x0013 ,    0x0012 ,    ( ^0031   [#0] if     )
+: rom_image DATA
+: rsvd_rom
+(    T        X        Y        Z       ADDR: VALUE )
+0x0000 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0000: #? )
+0x0000 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0001: #nil )
+0x0000 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0002: #f )
+0x0000 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0003: #t )
+0x0000 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0004: #unit )
+0x000c , 0x0001 , 0x0001 , 0x0000 ,  ( ^0005: EMPTY_DQ )
+0x0006 , 0x8001 , 0x0000 , 0x0000 ,  ( ^0006: #type_t )
+0x0006 , 0x0000 , 0x0000 , 0x0000 ,  ( ^0007: #fixnum_t )
+0x0006 , 0x8002 , 0x0000 , 0x0000 ,  ( ^0008: #actor_t )
+0x0006 , 0x8002 , 0x0000 , 0x0000 ,  ( ^0009: PROXY_T )
+0x0006 , 0x8002 , 0x0000 , 0x0000 ,  ( ^000a: STUB_T )
+0x0006 , 0x8003 , 0x0000 , 0x0000 ,  ( ^000b: #instr_t )
+0x0006 , 0x8002 , 0x0000 , 0x0000 ,  ( ^000c: #pair_t )
+0x0006 , 0x8003 , 0x0000 , 0x0000 ,  ( ^000d: #dict_t )
+0x0006 , 0xffff , 0x0000 , 0x0000 ,  ( ^000e: FWD_REF_T )
+0x0006 , 0x8000 , 0x0000 , 0x0000 ,  ( ^000f: FREE_T )
+: boot_rom
+(    T        X        Y        Z       ADDR )
+0x000b , 0x8016 , 0x8000 , 0x0015 ,  ( ^0010 )
+0x000b , 0x800f , 0x8001 , 0x0000 ,  ( ^0011 )
+0x000b , 0x801a , 0xffff , 0x0033 ,  ( ^0012 )
+0x000b , 0x8018 , 0x8001 , 0x0034 ,  ( ^0013 )
+0x000b , 0x800f , 0x8000 , 0x0000 ,  ( ^0014 )
+0x000b , 0x8011 , 0x8000 , 0x0016 ,  ( ^0015 )
+0x000b , 0x8007 , 0x0001 , 0x0017 ,  ( ^0016 )
+0x000b , 0x8002 , 0x8003 , 0x0018 ,  ( ^0017 )
+0x000b , 0x8002 , 0x8002 , 0x0019 ,  ( ^0018 )
+0x000b , 0x8011 , 0x8001 , 0x001a ,  ( ^0019 )
+0x000b , 0x8002 , 0x8001 , 0x001b ,  ( ^001a )
+0x000b , 0x8011 , 0x8001 , 0x001c ,  ( ^001b )
+0x000b , 0x8012 , 0x8001 , 0x001d ,  ( ^001c )
+0x000b , 0x8007 , 0x8001 , 0x001e ,  ( ^001d )
+0x000b , 0x8016 , 0x8000 , 0x001f ,  ( ^001e )
+0x000b , 0x8012 , 0x8001 , 0x0020 ,  ( ^001f )
+0x000b , 0x8007 , 0x8002 , 0x0021 ,  ( ^0020 )
+0x000b , 0x8016 , 0x8001 , 0x0022 ,  ( ^0021 )
+0x000b , 0x8007 , 0x8003 , 0x0023 ,  ( ^0022 )
+0x000b , 0x8017 , 0x8000 , 0x0024 ,  ( ^0023 )
+0x000b , 0x8012 , 0x8001 , 0x0025 ,  ( ^0024 )
+0x000b , 0x8017 , 0x8001 , 0x0026 ,  ( ^0025 )
+0x000b , 0x8003 , 0x0014 , 0x0027 ,  ( ^0026 )
+0x000b , 0x8002 , 0x8000 , 0x0028 ,  ( ^0027 )
+0x000b , 0x8006 , 0x8000 , 0x0029 ,  ( ^0028 )
+0x000b , 0x8003 , 0x002a , 0x0014 ,  ( ^0029 )
+0x000b , 0x8002 , 0xffff , 0x002b ,  ( ^002a )
+0x000b , 0x8006 , 0x8000 , 0x002c ,  ( ^002b )
+0x000b , 0x8003 , 0x0014 , 0x002d ,  ( ^002c )
+0x000b , 0x8002 , 0x0001 , 0x002e ,  ( ^002d )
+0x000b , 0x8003 , 0x0014 , 0x002f ,  ( ^002e )
+0x000b , 0x8002 , 0x0004 , 0x0030 ,  ( ^002f )
+0x000b , 0x8003 , 0x0031 , 0x0014 ,  ( ^0030 )
+0x000b , 0x8002 , 0x8000 , 0x0032 ,  ( ^0031 )
+0x000b , 0x8003 , 0x0014 , 0x0011 ,  ( ^0032 )
+0x000b , 0x800f , 0x8001 , 0x0000 ,  ( ^0033 )
+0x000b , 0x801a , 0xffff , 0x0035 ,  ( ^0034 )
+0x000b , 0x800f , 0x8001 , 0x0000 ,  ( ^0035 )
+( 216 cells, 54 quads )
 
 ( 0x0000 CONSTANT #?          ( undefined ) ... ucode.js )
 ( 0x0001 CONSTANT #nil        ( empty list ) ... ucode.js )
@@ -725,6 +722,54 @@ To Copy fixnum:n of list onto head:
     THEN
     E_BOUNDS ;
 
+: send_effect ( msg target sponsor -- )
+    2alloc >R               ( D: ) ( R: event )
+    self@ QZ@               ( D: effect ) ( R: event )
+    DUP QZ@                 ( D: effect events ) ( R: event )
+    R> pair                 ( D: effect events' )
+    SWAP QZ! ;              ( D: )
+: op_send ( -- ip' | error )
+    imm@ #-1 = IF
+        sp@ part            ( D: sp' target )
+        DUP is_cap IF
+            SWAP part       ( D: target sp'' msg )
+            ROT sponsor@    ( D: sp'' msg target sponsor )
+            send_effect     ( D: sp'' )
+            update_sp ;
+        THEN
+        E_NOT_CAP ;
+    THEN
+    E_BOUNDS ;
+
+: create_effect ( state beh -- actor )
+    #actor_t 2alloc ptr2cap ;
+: op_new ( -- ip' | error )
+    imm@ #-1 = IF
+        sp@ part            ( D: sp' beh )
+        DUP #instr_t typeq IF
+            SWAP part ROT   ( D: sp'' state beh )
+            create_effect   ( D: sp'' actor )
+            push_result ;
+        THEN
+        E_NOT_EXE ;
+    THEN
+    E_BOUNDS ;
+
+: become_effect ( state beh -- )
+    self@ QZ@ TUCK          ( D: state effect beh effect )
+    QX! QY! ;               ( D: )
+: op_beh ( -- ip' | error )
+    imm@ #-1 = IF
+        sp@ part            ( D: sp' beh )
+        DUP #instr_t typeq IF
+            SWAP part ROT   ( D: sp'' state beh )
+            become_effect   ( D: sp'' )
+            update_sp ;
+        THEN
+        E_NOT_EXE ;
+    THEN
+    E_BOUNDS ;
+
 (
 Type checking can produce the following errors:
 
@@ -767,10 +812,10 @@ Type checking can produce the following errors:
 
     invalid                 ( 0x8018: msg )
     invalid                 ( 0x8019: state )
-    invalid                 ( 0x801A: send )
+    op_send                 ( 0x801A: send )
     invalid                 ( 0x801B: signal )
-    invalid                 ( 0x801C: new )
-    invalid                 ( 0x801D: beh )
+    op_new                  ( 0x801C: new )
+    op_beh                  ( 0x801D: beh )
     invalid                 ( 0x801E: -unused- )
     invalid                 ( 0x801F: -unused- )
 
@@ -840,8 +885,7 @@ VARIABLE saved_sp           ( sp before instruction execution )
 
 : ufork_init
     0x8000 rom_image
-    16 34 +                 ( reserved rom + program )
-    4 * memcpy              ( x quads )
+    54 4 * memcpy           ( quads * 4 = cells )
     0x4010 mem_top!
     #nil mem_next!
     #0 mem_free!
@@ -926,7 +970,7 @@ VARIABLE saved_sp           ( sp before instruction execution )
     EXIT
 
 : ufork_boot
-    #nil 0x0014 #actor_t 2alloc ptr2cap
+    #nil 0x0010 #actor_t 2alloc ptr2cap
     #unit SWAP q_root_spn 2alloc
     event_enqueue
     0 run_loop ;
