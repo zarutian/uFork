@@ -3,7 +3,7 @@
 \ assumes gc is not hw implemented
 \ reference https://github.com/organix/ufork-c/blob/main/gc.md
 
-gcMem CONSTANT 0x1000 ( should be changed )
+gcMem_base CONSTANT 0x1000 ( should be changed )
 
 : gcMem_common ( D: quad_ram_addr -- bit_offset addr )
   0x3FFF_&
