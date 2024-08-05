@@ -353,8 +353,104 @@
 : is_rom ( raw -- bool )
     0xC000 AND 0= ;
 
+( : int2fix ( n -- #n )
+    MSB| ; ... ucode.js )
+: fix2int ( #n -- n )
+    ROL ASR ;
+: ptr2cap ( ptr -- cap )
+    0x2000 OR ;
+: cap2ptr ( cap -- ptr )
+    0xDFFF AND ;
+
+0x4000 CONSTANT q_mem_desc  ( quad-memory descriptor )
+0x4001 CONSTANT q_ek_queues ( event/continuation queues )
+0x400F CONSTANT q_root_spn  ( root sponsor )
+
+( 2-bit gc color markings )
+0x0 CONSTANT gc_free_color
+0x1 CONSTANT gc_genx_color
+0x2 CONSTANT gc_geny_color
+0x3 CONSTANT gc_scan_color
+VARIABLE gc_curr_gen        ( currently active gc generation {x, y} )
+VARIABLE gc_prev_gen        ( previously active gc generation {y, x} )
+VARIABLE gc_phase           ( current phase in gc state-machine )
+
+( FIXME: re-use rom_image until we have dedicated space for gc colors )
+: gc_color@ ( qref -- color )
+    rom_image + @ ;
+: gc_set_color ( qref color -- )
+    SWAP
+: gc_color! ( color qref -- )
+    rom_image + ! ;
+
+: gc_init ( -- )
+    ( loop to set reserved RAM to gc_free_color )
+    gc_free_color 16 ?LOOP-
+        DUP I gc_color!
+    AGAIN DROP
+    gc_genx_color gc_curr_gen !
+    gc_geny_color gc_prev_gen ! ;
+
+: gc_gen_swap ( -- )
+    gc_curr_gen @ gc_prev_gen @
+    gc_curr_gen ! gc_prev_gen ! ;
+
+: gc_valid ( qref -- addr in_heap )
+    cap2ptr DUP is_ram ;
+: gc_scan ( qref -- )
+    gc_valid IF             ( D: addr )
+        ( mark quad to-be-scanned )
+        DUP gc_color@ gc_prev_gen @ = IF
+            gc_scan_color gc_set_color ;
+        THEN
+    THEN DROP ;
+: gc_mark ( qref -- )
+    gc_valid IF             ( D: addr )
+        ( mark quad in-use )
+        DUP gc_curr_gen @ gc_set_color
+        DUP QT@ gc_scan
+        DUP QX@ gc_scan
+        DUP QY@ gc_scan
+        QZ@ gc_scan ;
+    THEN DROP ;
+: gc_free ( qref -- )
+    gc_valid IF             ( D: addr )
+        ( mark quad in free-list )
+        gc_free_color gc_set_color ;
+    THEN DROP ;
+
+: gc_phase_0 ( -- )
+    EXIT
+
+: gc_phase_1 ( -- )
+    2 gc_phase ! ;
+
+: gc_phase_2 ( -- )
+    3 gc_phase ! ;
+
+: gc_phase_3 ( -- )
+    0 gc_phase ! ;
+
+: gc_step ( -- )
+    gc_phase @
+    JMPTBL 4 ,
+    gc_phase_0              ( idle phase )
+    gc_phase_1              ( prep phase )
+    gc_phase_2              ( mark phase )
+    gc_phase_3              ( sweep phase )
+    DROP                    ( default )
+    0 gc_phase ! ;
+
+: gc_collect ( -- )
+    ( stop-the-world garbage-collection )
+    1 gc_phase !
+    BEGIN
+        gc_step
+        gc_phase @ 0=
+    UNTIL ;
+
 : wr_mark ( value qref -- value qref )
-    OVER DROP ;             ( TODO: if gc in progress, mark _value_ in-use )
+    OVER gc_mark ;          ( mark _value_ in-use )
 : qt! ( value qref -- )
     DUP is_ram IF
         wr_mark QT! ;
@@ -372,35 +468,6 @@
         wr_mark QZ! ;
     THEN disrupt ;
 
-: is_pair ( raw -- bool )
-    DUP is_ptr IF
-        QT@ #pair_t = ;
-    THEN DROP FALSE ;
-: typeq ( raw typ -- truthy )
-    DUP #fixnum_t = IF
-        DROP is_fix ;
-    THEN
-    DUP #actor_t = IF
-        DROP is_cap ;
-    THEN
-    2DUP SWAP QT@ = IF
-        PROXY_T = IF        ( D: raw )
-            is_cap ;
-        THEN
-        is_ptr ;
-    THEN
-    2DROP FALSE ;
-
-( : int2fix ( n -- #n )
-    MSB| ; ... ucode.js )
-: fix2int ( #n -- n )
-    ROL ASR ;
-: ptr2cap ( ptr -- cap )
-    0x2000 OR ;
-: cap2ptr ( cap -- ptr )
-    0xDFFF AND ;
-
-0x4000 CONSTANT q_mem_desc  ( quad-memory descriptor )
 : mem_top@ ( -- data )
     q_mem_desc QT@ ;
 : mem_next@ ( -- data )
@@ -416,9 +483,8 @@
 : mem_free! ( data -- )
     q_mem_desc QY! ;
 : mem_root! ( data -- )
-    q_mem_desc QZ! ;
+    q_mem_desc qz! ;
 
-0x4001 CONSTANT q_ek_queues ( event/continuation queues )
 : e_head@ ( -- data )
     q_ek_queues QT@ ;
 : e_tail@ ( -- data )
@@ -426,7 +492,7 @@
 : e_head! ( data -- )
     q_ek_queues QT! ;
 : e_tail! ( data -- )
-    q_ek_queues QX! ;
+    q_ek_queues qx! ;
 : k_head@ ( -- data )
     q_ek_queues QY@ ;
 : k_tail@ ( -- data )
@@ -434,9 +500,8 @@
 : k_head! ( data -- )
     q_ek_queues QY! ;
 : k_tail! ( data -- )
-    q_ek_queues QZ! ;
+    q_ek_queues qz! ;
 
-0x400F CONSTANT q_root_spn  ( root sponsor )
 : spn_memory@ ( sponsor -- data )
     QT@ ;
 : spn_events@ ( sponsor -- data )
@@ -452,12 +517,12 @@
 : spn_cycles! ( data sponsor -- )
     QY! ;
 : spn_signal! ( data sponsor -- )
-    QZ! ;
+    qz! ;
 
 : event_enqueue ( event -- )
-    #nil OVER qz!
+    #nil OVER QZ!
     e_head@ is_ram IF
-        DUP e_tail@ qz!
+        DUP e_tail@ QZ!
     ELSE
         DUP e_head!
     THEN
@@ -503,20 +568,6 @@
 : ep!
     k_head@ qy! ;
 
-: op@
-    ip@ QX@ ;
-: imm@
-    ip@ QY@ ;
-: k@
-    ip@ QZ@ ;
-
-: sponsor@
-    ep@ QT@ ;
-: self@
-    ep@ QX@ ;
-: msg@
-    ep@ QY@ ;
-
 : reserve ( -- qref )
     mem_next@ DUP #nil XOR IF
         mem_free@ 1- mem_free!
@@ -527,6 +578,7 @@
     THEN
     E_NO_MEM disrupt ;
 : release ( qref -- )
+    DUP gc_free
     FREE_T OVER QT!
     ( #? OVER QX! #? OVER QY! )
     mem_next@ OVER QZ! mem_next!
@@ -540,7 +592,7 @@
 : _clear1
     #? R@ QZ!               ( D: ) ( R: qref )
 : _clear0
-    R> ;                    ( D: qref ) ( R: )
+    R> DUP gc_mark ;        ( D: qref ) ( R: )
 : 1alloc ( X T -- qref )
     reserve >R              ( D: X T ) ( R: qref )
     R@ QT!                  ( D: X ) ( R: qref )
@@ -560,6 +612,25 @@
     R@ QZ!                  ( D: ) ( R: qref )
     _clear0 ;
 
+: is_pair ( raw -- bool )
+    DUP is_ptr IF
+        QT@ #pair_t = ;
+    THEN DROP FALSE ;
+: typeq ( raw typ -- truthy )
+    DUP #fixnum_t = IF
+        DROP is_fix ;
+    THEN
+    DUP #actor_t = IF
+        DROP is_cap ;
+    THEN
+    2DUP SWAP QT@ = IF
+        PROXY_T = IF        ( D: raw )
+            is_cap ;
+        THEN
+        is_ptr ;
+    THEN
+    2DROP FALSE ;
+
 : pair ( rest first -- pair )
     #pair_t 2alloc ;
 : part ( pair -- rest first )
@@ -574,6 +645,36 @@
     DUP is_pair IF
         QY@ ;
     THEN DROP #? ;
+
+: op@
+    ip@ QX@ ;
+: imm@
+    ip@ QY@ ;
+: k@
+    ip@ QZ@ ;
+
+: sponsor@
+    ep@ QT@ ;
+: self@
+    ep@ QX@ ;
+: msg@
+    ep@ QY@ ;
+
+: nil_result ( -- ip' )
+    sp@ #nil
+: push_result ( sp' result -- ip' )
+    pair
+: update_sp ( sp' -- ip' )
+    sp! k@ ;
+: undef_result ( -- ip' )
+    sp@ #? push_result ;
+: rplc_result ( sp result -- ip' )
+    OVER DUP is_ram IF      ( D: sp result sp )
+        qx!                 ( WARNING! stack modified in-place )
+    ELSE
+        2DROP
+    THEN                    ( D: sp )
+    update_sp ;
 
 (
 
@@ -658,22 +759,6 @@ To Copy fixnum:n of list onto head:
     THEN
     E_BOUNDS ;
 
-: nil_result ( -- ip' )
-    sp@ #nil
-: push_result ( sp' result -- ip' )
-    pair
-: update_sp ( sp' -- ip' )
-    sp! k@ ;
-: undef_result ( -- ip' )
-    sp@ #? push_result ;
-: rplc_result ( sp result -- ip' )
-    OVER DUP is_ram IF      ( D: sp result sp )
-        qx!                 ( WARNING! stack modified in-place )
-    ELSE
-        2DROP
-    THEN                    ( D: sp )
-    update_sp ;
-
 : op_push ( -- ip' | error )
     sp@ imm@                ( D: sp item )
     push_result ;
@@ -687,9 +772,10 @@ To Copy fixnum:n of list onto head:
 
 : peek_1arg ( -- sp tos )
     sp@ DUP QX@ ;
+: uf_bool ( truthy -- #t | #f )
+    IF #t ELSE #f THEN ;
 : cmp_result ( sp truthy -- ip' )
-    IF #t ELSE #f THEN
-    rplc_result ;           ( WARNING! stack modified in-place )
+    uf_bool rplc_result ;
 : op_eq ( -- ip' | error )
     peek_1arg               ( D: sp value )
     imm@ = cmp_result ;
@@ -704,7 +790,7 @@ To Copy fixnum:n of list onto head:
 : 2fix2int ( #n #m -- n m )
     SWAP fix2int            ( D: #m n )
     SWAP fix2int ;          ( D: n m )
-: 2not_fix ( sp' #n #m )
+: 2not_fix ( sp' #n #m -- ip' )
     2DROP #? rplc_result ;
 : cmp_eq                    ( D: )
     peek_2args = cmp_result ;
@@ -763,13 +849,10 @@ To Copy fixnum:n of list onto head:
     update_sp ;
 
 : op_typeq ( -- ip' | error )
-    sp@ part imm@           ( D: sp' value type )
+    peek_1arg imm@          ( D: sp value type )
     DUP #type_t typeq IF
-        typeq IF            ( D: sp' )
-            #t
-        ELSE
-            #f
-        THEN push_result ;
+        typeq uf_bool       ( D: sp uf_bool )
+        rplc_result ;
     THEN
     E_NO_TYPE ;
 
@@ -872,11 +955,11 @@ To Copy fixnum:n of list onto head:
     E_NOT_FIX ;
 
 : alu_result ( sp n -- ip' )
-    int2fix rplc_result ;   ( WARNING! stack modified in-place )
+    int2fix rplc_result ;
 : alu_not                   ( D: )
-    peek_1arg               ( D: sp' #n )
+    peek_1arg               ( D: sp #n )
     DUP is_fix IF
-        fix2int             ( D: sp' n )
+        fix2int             ( D: sp n )
         INVERT alu_result ;
     THEN
     DROP #? rplc_result ;
@@ -1084,6 +1167,7 @@ VARIABLE saved_sp           ( sp before instruction execution )
                     DROP cont_dequeue
                     DUP QY@ ( D: cont event )
                     release release
+                    gc_collect
                 THEN
             ELSE            ( D: op )
                 E_BOUNDS q_root_spn spn_signal! ;
@@ -1138,7 +1222,8 @@ VARIABLE saved_sp           ( sp before instruction execution )
     0x9000 q_root_spn spn_memory!
     0x8100 q_root_spn spn_events!
     0xB000 q_root_spn spn_cycles!
-    #? q_root_spn spn_signal! ;
+    #? q_root_spn spn_signal!
+    gc_init ;
 
 : ufork_init
     rom_init
