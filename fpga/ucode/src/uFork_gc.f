@@ -136,6 +136,5 @@ gcMem_base CONSTANT 0x1000 ( should be changed )
   gc_sweep       ( COMMENT: 3 )
   DROP
   3&
-  gc_phase_common
-  ;
+  JMP gcOneStep
   
