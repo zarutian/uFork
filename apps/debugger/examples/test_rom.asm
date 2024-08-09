@@ -19,12 +19,13 @@ rsvd_rom:
 ; 0x0006 , 0xffff , 0x0000 , 0x0000 ,  ( ^000e: FWD_REF_T )
 ; 0x0006 , 0x8000 , 0x0000 , 0x0000 ,  ( ^000f: FREE_T )
 
-boot:                       ; _ <- _
-    pair 0                  ; ()
-    my self                 ; () self
-    pair 1                  ; (self)
-    push reboot             ; state=(self) beh=reboot
-    beh -1                  ; --
+boot:                       ; _ <- caps
+    push 42                 ; 42
+    msg 0                   ; 42 caps
+    my self                 ; 42 caps self
+    push reboot             ; 42 state=(self caps) beh=reboot
+    beh 2                   ; 42 --
+    assert 42               ; --
     ref test_pairs
 
 reboot:                     ; (self) <- _
@@ -108,6 +109,45 @@ test_nth:
     push list-0             ; (273 546 819)
     nth -4                  ; #?
     assert #?               ; --
+    ref test_pick_and_roll
+
+test_pick_and_roll:
+    push 3                  ; 3
+    push 2                  ; 3 2
+    push 1                  ; 3 2 1
+    pick 0                  ; 3 2 1 #?
+    assert #?               ; 3 2 1
+    pick 1                  ; 3 2 1 1
+    assert 1                ; 3 2 1
+    pick -1                 ; 3 2 1 1
+    assert 1                ; 3 2 1
+    pick 2                  ; 3 2 1 2
+    assert 2                ; 3 2 1
+    pick -2                 ; 3 1 2 1
+    assert 1                ; 3 1 2
+    roll 0                  ; 3 1 2
+    dup 1                   ; 3 1 2 2
+    assert 2                ; 3 1 2
+    roll 1                  ; 3 1 2
+    dup 1                   ; 3 1 2 2
+    assert 2                ; 3 1 2
+    roll -1                 ; 3 1 2
+    dup 1                   ; 3 1 2 2
+    assert 2                ; 3 1 2
+    roll 2                  ; 3 2 1
+    dup 1                   ; 3 2 1 1
+    assert 1                ; 3 2 1
+    roll -3                 ; 1 3 2
+    assert 2                ; 1 3
+    pick 3                  ; 1 3 #?
+    assert #?               ; 1 3
+    roll 3                  ; 1 3 #?
+    assert #?               ; 1 3
+    assert 3                ; 1
+    pick 3                  ; 1 #?
+    assert #?               ; 1
+    roll -2                 ; --
+    assert #?               ; #?
     ref test_actors
 
 test_actors:
@@ -146,9 +186,12 @@ cell_beh:                   ; value <- value'
 
 ; adaptated from `lib.asm`
 once_beh:                   ; (rcvr) <- msg
-    push #nil               ; state=()
-    push sink_beh           ; state beh=sink_beh
-    beh -1                  ; --
+    push -3                 ; -3
+    push -2                 ; -3 -2
+    push -1                 ; -3 -2 -1
+    push sink_beh           ; ... beh=sink_beh
+    ; beh -1                  ; --
+    beh 0                   ; --
     ; ref fwd_beh
 fwd_beh:                    ; (rcvr) <- msg
     msg 0                   ; msg
