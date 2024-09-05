@@ -2,34 +2,9 @@
 ; subroutines implementing an unbounded version of #dict_t
 ;
 
-;.import
-;    std: "./std.asm"
+.import
+    std: "./std.asm"
 ;    std: "https://ufork.org/lib/std.asm"
-
-return_value:               ; k rv
-    roll 2                  ; rv k
-    return                  ; rv
-return_undef:               ; k
-    push #?                 ; k rv=#?
-    ref return_value
-return_nil:                 ; k
-    push #nil               ; k rv=()
-    ref return_value
-return_f:                   ; k
-    push #f                 ; k rv=#f
-    ref return_value
-return_t:                   ; k
-    push #t                 ; k rv=#t
-    ref return_value
-return_unit:                ; k
-    push #unit              ; k rv=#unit
-    ref return_value
-return_zero:                ; k
-    push 0                  ; k rv=0
-    ref return_value
-return_one:                 ; k
-    push 1                  ; k rv=1
-    ref return_value
 
 has:                        ; ( dict key k -- bool )
     roll -3                 ; k dict key
@@ -37,18 +12,18 @@ has:                        ; ( dict key k -- bool )
 has_search:                 ; k key dict
     quad -4                 ; k key next value' key' type
     eq #dict_t              ; k key next value' key' type==#dict_t
-    if_not has_f            ; k key next value' key'
+    if_not has_none         ; k key next value' key'
     pick 4                  ; k key next value' key' key
     cmp eq                  ; k key next value' key'==key
-    if has_t                ; k key next value'
+    if has_found            ; k key next value'
     drop 1                  ; k key dict=next
     ref has_search
-has_t:                      ; k key next value'
+has_found:                  ; k key next value'
     drop 3                  ; k
-    ref return_t
-has_f:                      ; k key next value' key'
+    ref std.return_t
+has_none:                   ; k key next value' key'
     drop 4                  ; k
-    ref return_f
+    ref std.return_f
 
 get:                        ; ( dict key k -- value )
     roll -3                 ; k dict key
@@ -56,19 +31,19 @@ get:                        ; ( dict key k -- value )
 get_search:                 ; k key dict
     quad -4                 ; k key next value' key' type
     eq #dict_t              ; k key next value' key' type==#dict_t
-    if_not get_f            ; k key next value' key'
+    if_not get_none         ; k key next value' key'
     pick 4                  ; k key next value' key' key
     cmp eq                  ; k key next value' key'==key
-    if get_t                ; k key next value'
+    if get_found            ; k key next value'
     drop 1                  ; k key dict=next
     ref get_search
-get_t:                      ; k key next value'
+get_found:                  ; k key next value'
     roll -4                 ; value' k key next
     drop 2                  ; value' k
     return                  ; value'
-get_f:                      ; k key next value' key'
+get_none:                   ; k key next value' key'
     drop 4                  ; k
-    ref return_undef
+    ref std.return_undef
 
 add:                        ; ( dict key value k -- dict' )
     roll -4                 ; k dict key value
@@ -76,7 +51,7 @@ add_tail:                   ; k dict key value
     roll 2                  ; k dict value key
     push #dict_t            ; k dict value key #dict_t
     quad 4                  ; k dict'
-    ref return_value
+    ref std.return_value
 
 set:                        ; ( dict key value k -- dict' )
     roll -4                 ; k dict key value
@@ -125,18 +100,16 @@ del_done:                   ; k key dict' next value' key'
     return                  ; dict'
 del_none:                   ; k orig key rev next value' key'
     drop 5                  ; k orig
-    ref return_value
+    ref std.return_value
 
+; example usage
 example:
     dict_t 1 #nil
     dict_t 2 #f
     dict_t 3 #t
     ref #nil
 
-; unit test suite
-boot:                       ; () <- {caps}
-;    msg 0                   ; {caps}
-;    ref std.commit
+demo_del:
     push example
     push -1
     call del
@@ -150,7 +123,75 @@ boot:                       ; () <- {caps}
     push example
     push 3
     call del
-    end commit
+    drop 1
+    ref std.commit
+
+; self-checked demo
+demo:
+    push #?                 ; #?
+    push #?                 ; #? #?
+demo_0:
+    call has                ; #f
+    assert #f               ; --
+    push #nil               ; ()
+    push 0                  ; () 0
+    dup 2                   ; () 0 () 0
+    call has                ; () 0 #f
+    assert #f               ; () 0
+    call get                ; #?
+    assert #?               ; --
+demo_1:
+    push #nil               ; ()
+    push 0                  ; () 0
+    push #unit              ; () 0 #unit
+    call add                ; {0:#unit}
+    pick 1                  ; {0:#unit} {0:#unit}
+    push 0                  ; {0:#unit} {0:#unit} 0
+    call get                ; {0:#unit} #unit
+    assert #unit            ; {0:#unit}
+demo_2:
+    push 1                  ; {0:#unit} 1
+    push -1                 ; {0:#unit} 1 -1
+    call add                ; {1:-1, 0:#unit}
+    dup 1                   ; {1:-1, 0:#unit} {1:-1, 0:#unit}
+    push 0                  ; {1:-1, 0:#unit} {1:-1, 0:#unit} 0
+    call get                ; {1:-1, 0:#unit} #unit
+    assert #unit            ; {1:-1, 0:#unit}
+demo_3:
+    push 0                  ; {1:-1, 0:#unit} 0
+    call del                ; {1:-1}
+    dup 1                   ; {1:-1} {1:-1}
+    push 0                  ; {1:-1} {1:-1} 0
+    call get                ; {1:-1} #?
+    assert #?               ; {1:-1}
+demo_4:
+    push 1                  ; {1:-1} 1
+    push #f                 ; {1:-1} 1 #f
+    call add                ; {1:#f, 1:-1}
+    dup 1                   ; {1:#f, 1:-1} {1:#f, 1:-1}
+    push 1                  ; {1:#f, 1:-1} {1:#f, 1:-1} 1
+    push #t                 ; {1:#f, 1:-1} {1:#f, 1:-1} 1 #t
+    call set                ; {1:#f, 1:-1} {1:#t, 1:-1}
+    dup 1                   ; {1:#f, 1:-1} {1:#t, 1:-1} {1:#t, 1:-1}
+    push 1                  ; {1:#f, 1:-1} {1:#t, 1:-1} {1:#t, 1:-1} 1
+    call del                ; {1:#f, 1:-1} {1:#t, 1:-1} {1:-1}
+    push 1                  ; {1:#f, 1:-1} {1:#t, 1:-1} {1:-1} 1
+    call get                ; {1:#f, 1:-1} {1:#t, 1:-1} -1
+    assert -1               ; {1:#f, 1:-1} {1:#t, 1:-1}
+    push 1                  ; {1:#f, 1:-1} {1:#t, 1:-1} 1
+    dict get                ; {1:#f, 1:-1} #t
+    assert #t               ; {1:#f, 1:-1}
+    push 1                  ; {1:#f, 1:-1} 1
+    dict get                ; #f
+    assert #f               ; --
+    ref demo_del
+
+; unit test suite
+boot:                       ; () <- {caps}
+;    msg 0                   ; {caps}
+;    ref std.commit
+;    end commit
+    ref demo
 
 .export
     has
