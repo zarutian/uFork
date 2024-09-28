@@ -291,6 +291,7 @@ _n_ _m_              | `alu` `xor`         | _n_^_m_      | bitwise _n_ exclusiv
 _n_ _m_              | `alu` `add`         | _n_+_m_      | sum of _n_ and _m_
 _n_ _m_              | `alu` `sub`         | _n_-_m_      | difference of _n_ and _m_
 _n_ _m_              | `alu` `mul`         | _n_\*_m_     | product of _n_ and _m_
+_n_ _m_              | `alu` `div`         | _q_ _r_      | Euclidean quotient and remainder/modulus
 _n_ _m_              | `alu` `lsl`         | _n_<<_m_     | logical shift left _n_ by _m_
 _n_ _m_              | `alu` `lsr`         | _n_>>_m_     | logical shift right _n_ by _m_
 _n_ _m_              | `alu` `asr`         | _n_>>>_m_    | arithmetic shift right _n_ by _m_
@@ -616,6 +617,40 @@ Compute an ALU function of the arguments on the stack.
     1. Push result onto the stack
  1. Otherwise
     1. Push `#?` onto the stack
+
+> **SIDEBAR: INTEGER DIVISION**
+>
+> The immediate value `+7` (div) is reserved for fixnum division.
+>
+> _q_ = _a_ / _b_ and _r_ = _a_ % _b_ where, _a_ = _bq_ + _r_
+>
+> However, there are several reasonable definitions.
+>
+> ##### Truncated
+>  a | b | q | r
+> ---|---|---|---
+> +17|+5 |+3 |+2
+> -17|+5 |-3 |-2
+> +17|-5 |-3 |+2
+> -17|-5 |+3 |-2
+>
+> ##### Floored
+>  a | b | q | r
+> ---|---|---|---
+> +17|+5 |+3 |+2
+> -17|+5 |-4 |+3
+> +17|-5 |-4 |-3
+> -17|-5 |+3 |-2
+>
+> ##### Euclidean
+>  a | b | q | r
+> ---|---|---|---
+> +17|+5 |+3 |+2
+> -17|+5 |-4 |+3
+> +17|-5 |-3 |+2
+> -17|-5 |+4 |+3
+>
+> where, 0 ≤ r < |b|
 
  T            | X (op)      | Y (imm)     | Z (k)
 --------------|-------------|-------------|-------------
