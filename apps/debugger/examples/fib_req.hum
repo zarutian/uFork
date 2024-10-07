@@ -1,0 +1,34 @@
+#
+# Fibonacci Requestor
+#
+# Implements a Parseq-style Requestor API
+# for computing the nth Fibonacci number.
+#
+
+DEF fib_req AS \(can, cb, n).[
+    CASE greater(n, 1) OF
+    TRUE : [
+        SEND (?, k_fib, sub(n, 1)) TO SELF # NEW fib_req
+        SEND (?, k_fib, sub(n, 2)) TO SELF # NEW fib_req
+        CREATE k_fib WITH \result.[
+            CASE result OF
+            (TRUE, x) : [
+                BECOME \result.[
+                    CASE result OF
+                    (TRUE, y) : [
+                        SEND (TRUE, add(x, y)) TO cb
+                    ]
+                    _ : [ SEND result TO cb ]
+                    END
+                ]
+            ]
+            _ : [ SEND result TO cb ]
+            END
+        ]
+    ]
+    _ : [ SEND (TRUE, n) TO cb ]
+    END
+]
+
+CREATE fib WITH fib_req
+SEND (?, println, 9) TO fib  # => (TRUE, 34)

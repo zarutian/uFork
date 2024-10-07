@@ -5,6 +5,7 @@
 .import
     std: "https://ufork.org/lib/std.asm"
     dev: "https://ufork.org/lib/dev.asm"
+    line_buf: "https://ufork.org/lib/line_buffer.asm"
 
 awp_store:
     ref 0
@@ -59,7 +60,7 @@ start:
 ; Initially, SELF is the callback for the AWP introduction with the room. If
 ; that succeeds, it becomes party_rx.
 
-join_beh:                   ; (debug_dev io_dev timer_dev awp_dev room_id) <- () | (room_rx . error)
+join_beh:                   ; (debug_dev io_dev timer_dev awp_dev room_id) <- () | (ok . room_rx/error)
     msg 0                   ; msg
     eq #nil                 ; msg==()
     if_not intro_cb         ; --
@@ -80,24 +81,24 @@ join_beh:                   ; (debug_dev io_dev timer_dev awp_dev room_id) <- ()
     state 5                 ; party_rx party_rx petname=room_id
     push awp_store          ; party_rx party_rx petname store
     roll 4                  ; party_rx petname store callback=party_rx
-    push #?                 ; party_rx petname store callback #?
-    push dev.intro_tag      ; party_rx petname store callback #? #intro
-    state 4                 ; party_rx petname store callback #? #intro awp_dev
+    push #?                 ; party_rx petname store callback to_cancel=#?
+    push dev.intro_tag      ; party_rx petname store callback to_cancel #intro
+    state 4                 ; party_rx petname store callback to_cancel #intro awp_dev
     send 6                  ; --
 
     ref std.commit
 
 intro_cb:
     ; check for a successful introduction
-    msg -1                  ; error
-    assert #nil             ; error==()!
+    msg 1                   ; ok
+    assert #t               ; --
 
     ; build party_tx
     deque new               ; msgs
     push 1                  ; msgs seq=1
     push 0                  ; msgs seq ack=0
     state 3                 ; msgs seq ack timer=timer_dev
-    msg 1                   ; msgs seq ack timer link=room_rx
+    msg -1                  ; msgs seq ack timer link=room_rx
     push link_tx_beh        ; msgs seq ack timer link link_tx_beh
     new 5                   ; party_tx=link_tx_beh.(link timer ack seq msgs)
 
@@ -113,7 +114,7 @@ intro_cb:
 
     ; build line_out
     state 2                 ; party_tx io_dev
-    push line_out_beh       ; party_tx io_dev line_out_beh
+    push line_buf.out_beh   ; party_tx io_dev line_out_beh
     new 1                   ; party_tx line_out=line_out_beh.(io_dev)
 
     ; build party_out
@@ -129,7 +130,7 @@ intro_cb:
     beh 4                   ; party_tx // link_rx_beh.(cust timer tx seq)
 
     ; set party_rx_timer
-    push #unit              ; party_tx msg=#unit
+    push #nil               ; party_tx msg=()
     my self                 ; party_tx msg target=SELF
     push rx_timeout         ; party_tx msg target delay=rx_timeout
     state 3                 ; party_tx msg target delay timer_dev
@@ -143,7 +144,7 @@ intro_cb:
     deque new               ; party_in line
     state 2                 ; party_in line io_dev
     roll 3                  ; line io_dev cust=party_in
-    push line_in_beh        ; line io_dev cust line_in_beh
+    push line_buf.in_beh    ; line io_dev cust line_in_beh
     new 3                   ; callback=line_in_beh.(cust io_dev line)
 
     ; register read callback
@@ -179,16 +180,16 @@ host_beh:                   ; (debug_dev io_dev timer_dev awp_dev room_id) <- ()
     push awp_store          ; greeter store
     push listen_cb_beh      ; greeter store listen_cb_beh
     new 0                   ; greeter store callback=listen_cb_beh.()
-    push #?                 ; greeter store callback #?
-    push dev.listen_tag     ; greeter store callback #? #listen
-    state 4                 ; greeter store callback #? #listen awp_dev
+    push #?                 ; greeter store callback to_cancel=#?
+    push dev.listen_tag     ; greeter store callback to_cancel #listen
+    state 4                 ; greeter store callback to_cancel #listen awp_dev
     send 5                  ; --
 
     ref std.commit
 
-listen_cb_beh:              ; () <- (stop . error)
-    msg -1                  ; error
-    assert #nil             ; error==()!
+listen_cb_beh:              ; () <- (ok . stop/error)
+    msg 1                   ; ok
+    assert #t               ; --
     ref std.commit
 
 greeter_beh:                ; (debug_dev timer_dev room) <- (to_cancel callback party party_rx)
@@ -232,7 +233,7 @@ greeter_beh:                ; (debug_dev timer_dev room) <- (to_cancel callback 
     new 4                   ; room_rx=link_rx_beh.(cust timer tx seq)
 
     ; set room_rx_timer
-    push #unit              ; room_rx msg=#unit
+    push #nil               ; room_rx msg=()
     pick 2                  ; room_rx msg target=room_rx
     push rx_timeout         ; room_rx msg target delay=rx_timeout
     state 2                 ; room_rx msg target delay timer_dev
@@ -249,8 +250,10 @@ greeter_beh:                ; (debug_dev timer_dev room) <- (to_cancel callback 
     new 2                   ; room_rx'=log_fwd_beh.(logr rcvr)
 
     ; complete the introduction
-    msg 2                   ; room_rx callback
-    send 1                  ; --
+    push #t                 ; room_rx ok=#t
+    pair 1                  ; result=(ok . room_rx)
+    msg 2                   ; result callback
+    send -1                 ; --
 
     ref std.commit
 
@@ -450,9 +453,9 @@ tx_tmo_2:
 ;   seq: next message number expected (to receive)
 ;
 
-link_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | #unit
+link_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | ()
     msg 0                   ; msg
-    eq #unit                ; msg==#unit
+    eq #nil                 ; msg==()
     if_not link_rx_1
 
     ; timeout
@@ -461,7 +464,7 @@ link_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | #uni
     beh -1                  ; --
 
     ; reset timer
-    push #unit              ; msg=#unit
+    push #nil               ; msg=()
     my self                 ; msg target=SELF
     push rx_timeout         ; msg target delay=rx_timeout
     state 2                 ; msg target delay timer
@@ -503,9 +506,9 @@ link_rx_2:
 
 ; One timeout has occurred. Another means disconnect.
 
-lost_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | #unit
+lost_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | ()
     msg 0                   ; msg
-    eq #unit                ; msg==#unit
+    eq #nil                 ; msg==()
     if_not lost_rx_1
 
     ; timeout
@@ -686,163 +689,6 @@ cnt_fwd_beh:                ; (limit rcvr) <- msg
     msg 0                   ; msg
     state 2                 ; msg rcvr
     ref std.send_msg
-
-; Accumulate characters one-at-a-time until '\n'.
-; When a `line` is complete, send it to `cust`.
-
-line_in_beh:                ; (cust io_dev line) <- result
-    ; check for error
-    msg -1                  ; error
-    if std.commit           ; --
-
-    ; request next char
-    my self                 ; callback=SELF
-    push #?                 ; callback to_cancel=#?
-    state 2                 ; callback to_cancel io_dev
-    send 2                  ; --
-
-    ; add char to line
-    state 3                 ; line
-    msg 1                   ; line char
-    deque put               ; line'
-
-    ; check for newline
-    msg 1                   ; line' char
-    eq '\n'                 ; line' char=='\n'
-    if_not line_upd         ; line'
-
-    ; send line to cust
-    state 1                 ; line' cust
-    send -1                 ; --
-    deque new               ; line
-
-line_upd:                   ; line'
-    ; update state
-    state 2                 ; line' io_dev
-    state 1                 ; line' io_dev cust
-    my beh                  ; line' io_dev cust beh
-    beh 3                   ; --
-    ref std.commit
-
-; Buffer lines of output, sending characters one-at-a-time.
-; Initially, no current line or lines to send.
-
-line_out_beh:               ; (io_dev) <- result | line'
-    ; distinguish result from line'
-    msg 1                   ; first
-    eq #unit                ; first==#unit
-    if std.commit           ; --  // unexpected result!
-
-    ; extract char from line
-    msg 0                   ; line
-    deque pop               ; line' char
-
-line_snd:                   ; line' char
-    ; send char to output
-    my self                 ; line' char callback=SELF
-    push #?                 ; line' char callback to_cancel=#?
-    state 1                 ; line' char callback to_cancel io_dev
-    send 3                  ; line'
-
-    ; line empty?
-    dup 1                   ; line' line'
-    deque empty             ; line' is_empty(line')
-    if_not line_rem         ; line'
-
-    ; no more chars in line
-    state 1                 ; ... io_dev
-    push line_out_beh       ; ... io_dev line_out_beh
-    beh 1                   ; --
-    ref std.commit
-
-line_rem:                   ; line'
-    ; chars remaining in line
-    state 1                 ; line' io_dev
-    push line_buf           ; line' io_dev line_buf
-    beh 2                   ; --
-    ref std.commit
-
-; Writing current line, no additional lines buffered.
-
-line_buf:                   ; (io_dev line) <- result | line'
-    ; distinguish result from line'
-    msg 1                   ; first
-    eq #unit                ; first==#unit
-    if_not line_add         ; --
-
-    ; extract char from line
-    state 2                 ; line
-    deque pop               ; line' char
-    ref line_snd
-
-line_add:                   ; --
-    ; additional buffered lines
-    deque new               ; lines
-    msg 0                   ; lines line
-    deque put               ; lines'
-    my state                ; lines' line io_dev
-    push line_bufs          ; lines' line io_dev line_bufs
-    beh 3                   ; --
-    ref std.commit
-
-; Writing current line, one or more lines buffered.
-
-line_bufs:                  ; (io_dev line lines) <- result | line'
-    ; distinguish result from line'
-    msg 1                   ; first
-    eq #unit                ; first==#unit
-    if line_chr             ; --
-
-    ; add line' to lines
-    state 3                 ; lines
-    msg 0                   ; lines line
-    deque put               ; lines'
-    state 2                 ; lines' line
-    state 1                 ; lines' line io_dev
-    push line_bufs          ; lines' line io_dev line_bufs
-    beh 3                   ; --
-    ref std.commit
-
-line_chr:                   ; --
-    ; extract char from line
-    state 2                 ; line
-    deque pop               ; line char
-
-    ; send char to output
-    my self                 ; line char callback=SELF
-    push #?                 ; line char callback to_cancel=#?
-    state 1                 ; line char callback to_cancel io_dev
-    send 3                  ; line
-
-    ; line empty?
-    dup 1                   ; line line
-    deque empty             ; line is_empty(line)
-    if_not line_chrs        ; line
-
-    ; get next line
-    drop 1                  ; --
-    state 3                 ; lines
-    deque pop               ; lines line
-    pick 2                  ; lines line lines
-    deque empty             ; lines line is_empty(lines)
-    if_not line_more        ; lines line
-
-    ; no more lines
-    state 1                 ; lines line io_dev
-    push line_buf           ; lines line io_dev line_buf
-    beh 2                   ; lines
-    ref std.commit
-
-line_chrs:                  ; line
-    ; update state
-    state 3                 ; line lines
-    roll -2                 ; lines line
-
-line_more:                  ; lines line
-    state 1                 ; lines line io_dev
-    push line_bufs          ; lines line io_dev line_bufs
-    beh 3                   ; --
-    ref std.commit
 
 .export
     boot
