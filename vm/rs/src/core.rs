@@ -394,28 +394,35 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
                 kip
             },
             VM_QUAD => {
-                let n = imm.get_fix()?;
-                if (n >= 1) && (n <= 4) {
-                    let t = self.stack_pop();
-                    let x = if n > 1 { self.stack_pop() } else { UNDEF };
-                    let y = if n > 2 { self.stack_pop() } else { UNDEF };
-                    let z = if n > 3 { self.stack_pop() } else { UNDEF };
-                    if !self.typeq(TYPE_T, t) {
-                        return Err(E_NO_TYPE);  // type required
-                    }
-                    let quad = Quad::new(t, x, y, z);
-                    let v = self.alloc(&quad)?;
-                    self.stack_push(v)?;
-                } else if (n <= -1) && (n >= -4) {
-                    let val = self.stack_pop();
-                    let ptr = if val.is_ptr() { val } else { UNDEF };
-                    let quad = *self.mem(ptr);
-                    if n < -3 { self.stack_push(quad.z())?; }
-                    if n < -2 { self.stack_push(quad.y())?; }
-                    if n < -1 { self.stack_push(quad.x())?; }
-                    self.stack_push(quad.t())?;
-                } else {
-                    return Err(E_BOUNDS);  // bad component count
+                match imm.fix_num() {
+                    Some(n) => {
+                        if (n >= 1) && (n <= 4) {
+                            let t = self.stack_pop();
+                            let x = if n > 1 { self.stack_pop() } else { UNDEF };
+                            let y = if n > 2 { self.stack_pop() } else { UNDEF };
+                            let z = if n > 3 { self.stack_pop() } else { UNDEF };
+                            if self.typeq(TYPE_T, t) {
+                                let quad = Quad::new(t, x, y, z);
+                                let v = self.alloc(&quad)?;
+                                self.stack_push(v)?;
+                            } else {
+                                self.stack_push(UNDEF)?;  // type required
+                            }
+                        } else if (n <= -1) && (n >= -4) {
+                            let val = self.stack_pop();
+                            let ptr = if val.is_ptr() { val } else { UNDEF };
+                            let quad = *self.mem(ptr);
+                            if n < -3 { self.stack_push(quad.z())?; }
+                            if n < -2 { self.stack_push(quad.y())?; }
+                            if n < -1 { self.stack_push(quad.x())?; }
+                            self.stack_push(quad.t())?;
+                        } else {
+                            self.stack_push(UNDEF)?;  // bad component count
+                        }
+                    },
+                    _ => {
+                        self.stack_push(UNDEF)?;  // fixnum expected
+                    },
                 }
                 kip
             },
@@ -672,6 +679,41 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
                     },
                     _ => {
                         return Err(E_BOUNDS);  // unknown MY op
+                    }
+                }
+                kip
+            },
+            VM_ACTOR => {
+                let tos = self.stack_pop();
+                let nos = self.stack_pop();
+                match imm {
+                    ACTOR_SEND => {
+                        if tos.is_cap() {
+                            let spn = self.event_sponsor(self.ep());  // implicit sponsor from event
+                            self.effect_send(spn, tos, nos)?;
+                        }
+                    },
+                    ACTOR_POST => {
+                        let spn = self.stack_pop();  // explicit sponsor from stack
+                        if tos.is_cap() {
+                            self.effect_send(spn, tos, nos)?;
+                        }
+                    },
+                    ACTOR_CREATE => {
+                        if self.typeq(INSTR_T, tos) {
+                            let actor = self.effect_create(tos, nos)?;
+                            self.stack_push(actor)?;
+                        } else {
+                            self.stack_push(UNDEF)?;  // invalid actor
+                        }
+                    },
+                    ACTOR_BECOME => {
+                        if self.typeq(INSTR_T, tos) {
+                            self.effect_become(tos, nos)?;
+                        }
+                    },
+                    _ => {
+                        // unknown ACTOR op (ignored)
                     }
                 }
                 kip

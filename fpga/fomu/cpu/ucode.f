@@ -1283,7 +1283,8 @@ To Copy fixnum:n of list onto head:
             quad_XT
             quad_YXT
             quad_ZYXT
-            E_BOUNDS ;      ( default case )
+            2DROP           ( default case )
+            #? push_result ;
         THEN                ( D: +n )
         sp@ part            ( D: +n sp' T )
         DUP #type_t typeq IF
@@ -1297,13 +1298,16 @@ To Copy fixnum:n of list onto head:
                 quad_2
                 quad_3
                 quad_4
-                E_BOUNDS ;  ( default case )
+                R> 2DROP    ( default case )
+                #? push_result ;
             THEN
-            E_BOUNDS ;
+            2DROP           ( D: sp' )
+            #? push_result ;
         THEN
-        E_NO_TYPE ;
+        ROT 2DROP           ( D: sp' )
+        #? push_result ;
     THEN
-    E_NOT_FIX ;
+    DROP undef_result ;
 
 (
 : nil_result ( -- ip' )
@@ -1540,6 +1544,64 @@ del_none:                   ; k orig key rev next value' key'
         E_NOT_EXE ;
     THEN ;                  ( D: error )
 
+: actor_send ( sp -- ip' | error )
+    part                    ( D: sp' target )
+    DUP is_cap IF
+        >R                  ( D: sp' ) ( R: target )
+        part                ( D: sp'' msg ) ( R: target )
+        R>                  ( D: sp'' msg target )
+        sponsor@            ( D: sp'' msg target sponsor )
+        send_effect         ( D: sp'' )
+        update_sp ;
+    THEN
+    2DROP k@ ;
+: actor_post ( sp -- ip' | error )
+    part                    ( D: sp' target )
+    DUP is_cap IF
+        >R                  ( D: sp' ) ( R: target )
+        part                ( D: sp'' msg ) ( R: target )
+        R>                  ( D: sp'' msg target )
+        ROT                 ( D: msg target sp'' )
+        part                ( D: msg target sp''' sponsor )
+        SWAP                ( D: msg target sponsor sp''' )
+        >R                  ( D: msg target sponsor ) ( R: sp''' )
+        send_effect         ( D: ) ( R: sp''' )
+        R>                  ( D: sp''' )
+        update_sp ;
+    THEN
+    2DROP k@ ;
+: actor_create ( sp -- ip' | error )
+    part                    ( D: sp' beh )
+    DUP #instr_t typeq IF
+        >R                  ( D: sp' ) ( R: beh )
+        part                ( D: sp'' state ) ( R: beh )
+        R>                  ( D: sp'' state beh )
+        create_effect       ( D: sp'' actor )
+        push_result ;
+    THEN
+    2DROP k@ ;
+: actor_become ( sp -- ip' | error )
+    part                    ( D: sp' beh )
+    DUP #instr_t typeq IF
+        >R                  ( D: sp' ) ( R: beh )
+        part                ( D: sp'' state ) ( R: beh )
+        R>                  ( D: sp'' state beh )
+        become_effect       ( D: sp'' )
+        update_sp ;
+    THEN
+    2DROP k@ ;
+: op_actor ( -- ip' | error )
+    sp@ imm@ DUP is_fix IF
+        fix2int             ( imm )
+        JMPTBL 4 ,
+        actor_send          ( 0: send )
+        actor_post          ( 1: post )
+        actor_create        ( 2: create )
+        actor_become        ( 3: become )
+        DROP                ( default case )
+    THEN
+    update_sp ;
+
 : op_my ( -- ip' | error )
     sp@ self@
     imm@ #0 = IF            ( D: sp self )
@@ -1583,7 +1645,7 @@ del_none:                   ; k orig key rev next value' key'
     op_assert               ( 0x8007: assert )
 
     invalid                 ( 0x8008: sponsor )
-    op_quad                 ( 0x8009: quad )
+    op_actor                ( 0x8009: actor )
     invalid                 ( 0x800A: dict )
     invalid                 ( 0x800B: deque )
     op_my                   ( 0x800C: my )
@@ -1591,7 +1653,7 @@ del_none:                   ; k orig key rev next value' key'
     op_cmp                  ( 0x800E: cmp )
     op_end                  ( 0x800F: end )
 
-    invalid                 ( 0x8010: --reserved-- )
+    op_quad                 ( 0x8010: quad )
     op_pair                 ( 0x8011: pair )
     op_part                 ( 0x8012: part )
     op_nth                  ( 0x8013: nth )

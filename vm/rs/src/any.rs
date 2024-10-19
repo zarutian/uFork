@@ -48,7 +48,7 @@ pub const VM_EQ: Any        = Any { raw: DIR_RAW | 0x06 };  // +6
 pub const VM_ASSERT: Any    = Any { raw: DIR_RAW | 0x07 };  // +7
 
 pub const VM_SPONSOR: Any   = Any { raw: DIR_RAW | 0x08 };  // +8
-pub const VM_QUAD: Any      = Any { raw: DIR_RAW | 0x09 };  // +9
+pub const VM_ACTOR: Any     = Any { raw: DIR_RAW | 0x09 };  // +9
 pub const VM_DICT: Any      = Any { raw: DIR_RAW | 0x0A };  // +10
 pub const VM_DEQUE: Any     = Any { raw: DIR_RAW | 0x0B };  // +11
 pub const VM_MY: Any        = Any { raw: DIR_RAW | 0x0C };  // +12
@@ -56,7 +56,7 @@ pub const VM_ALU: Any       = Any { raw: DIR_RAW | 0x0D };  // +13
 pub const VM_CMP: Any       = Any { raw: DIR_RAW | 0x0E };  // +14
 pub const VM_END: Any       = Any { raw: DIR_RAW | 0x0F };  // +15
 
-pub const VM_10: Any        = Any { raw: DIR_RAW | 0x10 };  // RESERVED
+pub const VM_QUAD: Any      = Any { raw: DIR_RAW | 0x10 };  // +16
 pub const VM_PAIR: Any      = Any { raw: DIR_RAW | 0x11 };  // +17
 pub const VM_PART: Any      = Any { raw: DIR_RAW | 0x12 };  // +18
 pub const VM_NTH: Any       = Any { raw: DIR_RAW | 0x13 };  // +19
@@ -117,6 +117,12 @@ pub const CMP_NE: Any       = PLUS_5;
 pub const MY_SELF: Any      = ZERO;
 pub const MY_BEH: Any       = PLUS_1;
 pub const MY_STATE: Any     = PLUS_2;
+
+// VM_DEQUE deque operations
+pub const ACTOR_SEND: Any   = ZERO;
+pub const ACTOR_POST: Any   = PLUS_1;
+pub const ACTOR_CREATE: Any = PLUS_2;
+pub const ACTOR_BECOME: Any = PLUS_3;
 
 // VM_END thread actions
 pub const END_ABORT: Any    = MINUS_1;
