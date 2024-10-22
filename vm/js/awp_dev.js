@@ -36,8 +36,9 @@ beh:                    ; callback <- message
     msg 0               ; message
     state 0             ; message callback
     send -1             ; --
-    push sink_beh       ; sink_beh
-    beh 0               ; --
+    push #?             ; #?
+    push sink_beh       ; #? sink_beh
+    beh -1              ; --
     end commit
 
 .export
@@ -570,7 +571,7 @@ function awp_dev({
     function listen(event_stub_ptr, request) {
         const listen_callback = core.u_nth(request, 2);
         const store_fix = core.u_nth(request, 3);
-        const greeter = core.u_nth(request, 4);
+        const greeter = core.u_nth(request, -3);
 
 // Validate the message.
 

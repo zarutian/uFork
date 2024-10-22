@@ -8,7 +8,7 @@
     referee: "./referee.asm"
 
 beh:
-is_eq_beh:                  ; (receiver expected yes no) <- actual
+is_eq_beh:                  ; (receiver expected yes . no) <- actual
     state 2                 ; expected
     msg 0                   ; expected actual
     cmp eq                  ; expected==actual?
@@ -16,7 +16,7 @@ is_eq_beh:                  ; (receiver expected yes no) <- actual
     state 3                 ; yes
     ref send
 no:
-    state 4                 ; no
+    state -3                ; no
     ref send
 send:
     state 1                 ; yes/no receiver
@@ -30,14 +30,16 @@ boot:                       ; () <- {caps}
     dict get                ; debug_dev
     ref suite
 
-test:                       ; (verdict) <- {caps}
-    push #t                 ; 2nd=#t
-    push #t                 ; 2nd 1st=#t // order doesn't matter
-    push #?                 ; 2nd 1st probation=#?
-    push #?                 ; 2nd 1st probation timer=#?
-    state 1                 ; 2nd 1st probation timer verdict
-    push referee.beh        ; 2nd 1st probation timer verdict referee_beh
-    new 5                   ; referee=referee_beh.(verdict timer probation 1st 2nd)
+test:                       ; judge <- {caps}
+    push #nil               ; ()
+    push #t                 ; () 2nd=#t
+    push #t                 ; () 2nd 1st=#t // order doesn't matter
+    push #?                 ; () 2nd 1st probation=#?
+    push #?                 ; () 2nd 1st probation timer=#?
+    state 0                 ; () 2nd 1st probation timer judge
+    pair 5                  ; (judge timer probation 1st 2nd)
+    push referee.beh        ; (judge timer probation 1st 2nd) referee_beh
+    new -1                  ; referee=referee_beh.(judge timer probation 1st 2nd)
 suite:
 
 ; The actor is sent the expected value, emitting #t for 'yes'.
@@ -47,8 +49,9 @@ suite:
     push #t                 ; referee actual no yes=#t
     push 42                 ; referee actual no yes expected=42
     pick 5                  ; referee actual no yes expected receiver=referee
-    push is_eq_beh          ; referee actual no yes expected receiver is_eq_beh
-    new 4                   ; referee actual is_eq=is_eq_beh.(receiver expected yes no)
+    pair 3                  ; referee actual (receiver expected yes . no)
+    push is_eq_beh          ; referee actual (receiver expected yes . no) is_eq_beh
+    new -1                  ; referee actual is_eq=is_eq_beh.(receiver expected yes . no)
 
 ; The actor is sent an unexpected value, emitting #t for 'no'.
 
@@ -58,8 +61,9 @@ suite:
     push #f                 ; referee actual no yes=#f
     push 42                 ; referee actual no yes expected=42
     pick 5                  ; referee actual no yes expected receiver=referee
-    push is_eq_beh          ; referee actual no yes expected receiver is_eq_beh
-    new 4                   ; referee actual is_eq=is_eq_beh.(receiver expected yes no)
+    pair 3                  ; referee actual (receiver expected yes . no)
+    push is_eq_beh          ; referee actual (receiver expected yes . no) is_eq_beh
+    new -1                  ; referee actual is_eq=is_eq_beh.(receiver expected yes . no)
     send -1                 ; referee
     ref std.commit
 

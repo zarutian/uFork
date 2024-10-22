@@ -138,8 +138,9 @@ random_adapter_beh:         ; random_dev <- (cust . n)
     push 1                  ; n 1
     alu sub                 ; limit=n-1
     msg 1                   ; limit cust
-    state 0                 ; limit cust random_dev
-    send 2                  ; --
+    pair 1                  ; (cust . limit)
+    state 0                 ; (cust . limit) random_dev
+    send -1                 ; --
     ref std.commit
 
 timer_adapter_beh:          ; timer_dev <- (dt msg . actor)
@@ -436,8 +437,9 @@ test_predicates:            ; ( -- )
     call is_function        ; k actual
     assert #f               ; k
 
-    push beh                ; k beh
-    new 0                   ; k actor=beh.()
+    push #?                 ; k #?
+    push std.sink_beh       ; k #? sink_beh
+    new -1                  ; k sink=sink_beh.#?
     call is_actor           ; k actual
     assert #t               ; k
     push is_actor           ; k value
@@ -627,7 +629,7 @@ test_cmp:                   ; ( -- )
 boot:
     ref test
 
-test:                       ; (verdict) <- {caps}
+test:                       ; judge <- {caps}
     call test_alu           ; --
     call test_and           ; --
     call test_cmp           ; --
@@ -639,8 +641,8 @@ test:                       ; (verdict) <- {caps}
     call test_not           ; --
     call test_or            ; --
     call test_predicates    ; --
-    push #t                 ; pass=#t
-    state 1                 ; pass verdict
+    push #t                 ; verdict=#t
+    state 0                 ; verdict judge
     send -1                 ; --
     ref std.commit
 

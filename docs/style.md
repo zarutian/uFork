@@ -315,8 +315,8 @@ In the stack diagram, label values as they are pushed onto the stack:
 
 In the stack diagram, depict actor creation like `beh.state`:
 
-    push example_beh            ; b a example_beh
-    new 2                       ; example=example_beh.(a b)
+    push example_beh            ; (a . b) example_beh
+    new -1                      ; example=example_beh.(a . b)
 
 At the entry point of each behavior, show the signature of the state and
 message like `state <- msg`. For example:
@@ -328,10 +328,18 @@ If the module represents a behavior, the behavior's export should be named
 
 Non-library modules should use absolute URLs to import library modules.
 
-    // Good
+    ; Good
     .import
         std: "https://ufork.org/lib/std.asm"
 
-    // Bad
+    ; Bad
     .import
         std: "../../../lib/std.asm"
+
+Avoid use of `my beh` where possible, instead pushing behaviors by name.
+
+    ; Good
+    push example_beh            ; example_beh
+
+    ; Bad
+    my beh                      ; example_beh

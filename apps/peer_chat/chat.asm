@@ -115,7 +115,7 @@ intro_cb:
     ; build line_out
     state 2                 ; party_tx io_dev
     push line_buf.out_beh   ; party_tx io_dev line_out_beh
-    new 1                   ; party_tx line_out=line_out_beh.(io_dev)
+    new -1                  ; party_tx line_out=line_out_beh.io_dev
 
     ; build party_out
     push party_out_beh      ; party_tx line_out party_out_beh
@@ -144,8 +144,9 @@ intro_cb:
     deque new               ; party_in line
     state 2                 ; party_in line io_dev
     roll 3                  ; line io_dev cust=party_in
-    push line_buf.in_beh    ; line io_dev cust line_in_beh
-    new 3                   ; callback=line_in_beh.(cust io_dev line)
+    pair 2                  ; (cust io_dev . line)
+    push line_buf.in_beh    ; (cust io_dev . line) line_in_beh
+    new -1                  ; callback=line_in_beh.(cust io_dev . line)
 
     ; register read callback
     push #?                 ; callback to_cancel=#?
@@ -182,8 +183,9 @@ host_beh:                   ; (debug_dev io_dev timer_dev awp_dev room_id) <- ()
     new 0                   ; greeter store callback=listen_cb_beh.()
     push #?                 ; greeter store callback to_cancel=#?
     push dev.listen_tag     ; greeter store callback to_cancel #listen
-    state 4                 ; greeter store callback to_cancel #listen awp_dev
-    send 5                  ; --
+    pair 4                  ; listen_request=(#listen to_cancel callback store . greeter)
+    state 4                 ; listen_request awp_dev
+    send -1                 ; --
 
     ref std.commit
 
@@ -347,7 +349,7 @@ link_tx_msg:                ; (link timer ack seq msgs) <- (tx_msg . content)
     state 3                 ; msgs' msgs' seq+1 ack
     state 2                 ; msgs' msgs' seq+1 ack timer
     state 1                 ; msgs' msgs' seq+1 ack timer link
-    my beh                  ; msgs' msgs' seq+1 ack timer link beh
+    push link_tx_beh        ; msgs' msgs' seq+1 ack timer link link_tx_beh
     beh 5                   ; msgs'
 
     ; if the queue was empty previously,
@@ -401,7 +403,7 @@ tx_ack_1:                   ; msgs seq ack timer link msgs' content
 
 tx_ack_2:                   ; msgs seq ack timer link
     ; update tx state
-    my beh                  ; msgs seq ack timer link beh
+    push link_tx_beh        ; msgs seq ack timer link link_tx_beh
     beh 5                   ; --
     ref std.commit
 
@@ -574,7 +576,7 @@ room_add:                   ; --
 
     ; update room state
     dup 1                   ; {parties'} {parties'}
-    my beh                  ; {parties'} {parties'} beh
+    push room_beh           ; {parties'} {parties'} room_beh
     beh -1                  ; {parties'}
 
     ; broadcast to updated parties
@@ -590,7 +592,7 @@ room_del:                   ; --
 
     ; update room state
     dup 1                   ; {parties'} {parties'}
-    my beh                  ; {parties'} {parties'} beh
+    push room_beh           ; {parties'} {parties'} room_beh
     beh -1                  ; {parties'}
 
     ; broadcast "left" announcement
@@ -684,7 +686,7 @@ cnt_fwd_beh:                ; (limit rcvr) <- msg
     my state                ; rcvr limit
     push 1                  ; rcvr limit 1
     alu sub                 ; rcvr limit-1
-    my beh                  ; rcvr limit-1 beh
+    push cnt_fwd_beh        ; rcvr limit-1 cnt_fwd_beh
     beh 2                   ; --
     msg 0                   ; msg
     state 2                 ; msg rcvr

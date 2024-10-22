@@ -6,7 +6,7 @@
     unwrap_result: "./unwrap_result.asm"
 
 beh:
-thru_beh:                   ; () <- request=(to_cancel callback . value)
+thru_beh:                   ; _ <- request=(to_cancel callback . value)
     msg -2                  ; value
     push #t                 ; value ok=#t
     pair 1                  ; result=(ok . value)
@@ -22,16 +22,17 @@ boot:                       ; () <- {caps}
     dict get                ; 42 debug_dev
     ref suite
 
-test:                       ; (verdict) <- {caps}
+test:                       ; judge <- {caps}
     push #t                 ; value=#t
-    state 1                 ; value verdict
-    push unwrap_result.beh  ; value verdict unwrap_result_beh
-    new 1                   ; value callback=unwrap_result_beh.(verdict)
+    state 0                 ; value judge
+    push unwrap_result.beh  ; value judge unwrap_result_beh
+    new -1                  ; value callback=unwrap_result_beh.judge
 suite:
     push #?                 ; value callback to_cancel=#?
     pair 2                  ; request=(to_cancel callback . value)
-    push thru_beh           ; request thru_beh
-    new 0                   ; request thru=thru_beh.()
+    push #?                 ; request #?
+    push thru_beh           ; request #? thru_beh
+    new -1                  ; request thru=thru_beh.#?
     ref std.send_msg
 
 .export

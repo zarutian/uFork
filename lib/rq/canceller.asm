@@ -13,7 +13,7 @@
     referee: "../testing/referee.asm"
 
 beh:
-canceller_beh:              ; () <- message
+canceller_beh:              ; _ <- message
     msg 0                   ; message
     typeq #actor_t          ; cap?
     if_not got_reason       ; --
@@ -23,12 +23,12 @@ canceller_beh:              ; () <- message
     ref std.commit
 
 got_reason:
-    msg 0                   ; (reason)
-    push cancel_wait_beh    ; (reason) cancel_wait_beh
+    msg 0                   ; (reason . _)
+    push cancel_wait_beh    ; (reason . _) cancel_wait_beh
     beh -1                  ; --
     ref std.commit
 
-cancel_wait_beh:            ; (reason) <- message
+cancel_wait_beh:            ; (reason . _) <- message
     msg 0                   ; message
     typeq #actor_t          ; cap?
     if_not std.commit       ; --
@@ -43,8 +43,9 @@ reason_wait_beh:            ; cancel <- message
     msg 1                   ; reason
     state 0                 ; reason cancel
 send_reason_to_cancel:      ; reason cancel
-    push std.sink_beh       ; reason cancel sink_beh
-    beh 0                   ; reason cancel
+    push #?                 ; reason cancel #?
+    push std.sink_beh       ; reason cancel #? sink_beh
+    beh -1                  ; reason cancel
     ref std.send_msg
 
 ; Test suite
@@ -58,17 +59,19 @@ boot:                       ; () <- {caps}
     dict get                ; timer referee=debug
     ref setup
 
-test:                       ; (verdict) <- {caps}
+test:                       ; judge <- {caps}
     msg 0                   ; {caps}
     push dev.timer_key      ; {caps} timer_key
     dict get                ; timer
-    push 1729               ; timer 2nd=1729
-    push 42                 ; timer 2nd 1st=42
-    push 100                ; timer 2nd 1st probation_ms=100
-    pick 4                  ; timer 2nd 1st probation_ms timer
-    state 1                 ; timer 2nd 1st probation_ms timer verdict
-    push referee.beh        ; timer 2nd 1st probation_ms timer verdict referee_beh
-    new 5                   ; timer referee=referee_beh.(verdict timer probation_ms 1st 2nd)
+    push #nil               ; timer ()
+    push 1729               ; timer () 2nd=1729
+    push 42                 ; timer () 2nd 1st=42
+    push 100                ; timer () 2nd 1st probation_ms=100
+    pick 5                  ; timer () 2nd 1st probation_ms timer
+    state 0                 ; timer () 2nd 1st probation_ms timer judge
+    pair 5                  ; timer (judge timer probation_ms 1st 2nd)
+    push referee.beh        ; timer (judge timer probation_ms 1st 2nd) referee_beh
+    new -1                  ; timer referee=referee_beh.(judge timer probation_ms 1st 2nd)
 setup:
 
 ; Cancel arrives before reason.
@@ -77,9 +80,7 @@ setup:
     push 25                 ; ... timer cancel cancel_ms=25
     push 50                 ; ... timer cancel cancel_ms reason_ms=50
     push 42                 ; ... timer cancel cancel_ms reason_ms reason=42
-    push test_beh           ; ... timer cancel cancel_ms reason_ms reason test_beh
-    new 5                   ; ... test
-    send 0                  ; ...
+    call run_test           ; ...
 
 ; Reason arrives before cancel.
 
@@ -87,33 +88,40 @@ setup:
     push 100                ; ... timer cancel cancel_ms=100
     push 75                 ; ... timer cancel cancel_ms reason_ms=75
     push 1729               ; ... timer cancel cancel_ms reason_ms reason=1729
-    push test_beh           ; ... timer cancel cancel_ms reason_ms reason test_beh
-    new 5                   ; ... test
-    send 0                  ; ...
+    call run_test           ; ...
     ref std.commit
 
 ; We create a canceller and send it a cancel capability and a reason, each after
 ; an independent delay. Each is sent twice, to test the canceller's tolerance
 ; to duplication.
 
-test_beh:                   ; (reason reason_ms cancel_ms cancel timer) <- ()
-    push canceller_beh      ; canceller_beh
-    new 0                   ; canceller=canceller_beh.()
-    state 0                 ; canceller (reason ...)
-    pick 2                  ; canceller (reason ...) canceller
-    state 2                 ; canceller (reason ...) canceller reason_ms
-    state 5                 ; canceller (reason ...) canceller reason_ms timer
-    dup 4                   ; ... (reason ...) canceller reason_ms timer
-    send 3                  ; ... (reason ...) canceller reason_ms timer
-    send 3                  ; canceller
-    state 4                 ; canceller cancel
-    pick 2                  ; canceller cancel canceller
-    state 3                 ; canceller cancel canceller cancel_ms
-    state 5                 ; canceller cancel canceller cancel_ms timer
-    dup 4                   ; ... cancel canceller cancel_ms timer
-    send 3                  ; ... cancel canceller cancel_ms timer
-    send 3                  ; canceller
-    ref std.commit
+run_test:                   ; ( timer cancel cancel_ms reason_ms reason -- )
+    roll -6                 ; k timer cancel cancel_ms reason_ms reason
+    push #?                 ; k timer cancel cancel_ms reason_ms reason #?
+    push canceller_beh      ; k timer cancel cancel_ms reason_ms reason #? canceller_beh
+    new -1                  ; k timer cancel cancel_ms reason_ms reason canceller=canceller_beh.#?
+    pick 6                  ; k timer cancel cancel_ms reason_ms reason canceller timer
+    push #nil               ; k timer cancel cancel_ms reason_ms reason canceller timer ()
+    roll 4                  ; k timer cancel cancel_ms reason_ms canceller timer () reason
+    pair 1                  ; k timer cancel cancel_ms reason_ms canceller timer (reason)
+    pick 3                  ; k timer cancel cancel_ms reason_ms canceller timer (reason) canceller
+    roll 5                  ; k timer cancel cancel_ms canceller timer (reason) canceller reason_ms
+    call schedule_twice     ; k timer cancel cancel_ms canceller
+    roll -2                 ; k timer cancel canceller cancel_ms
+    call schedule_twice     ; k
+    return
+
+schedule_twice:             ; ( timer message target delay -- )
+    roll -5                 ; k timer message target delay
+    push #nil               ; k timer message target delay ()
+    roll -4                 ; k timer () message target delay
+    pair 3                  ; k timer timer_msg=(delay target message)
+    dup 1                   ; k timer timer_msg timer_msg
+    pick 3                  ; k timer timer_msg timer_msg timer
+    send -1                 ; k timer timer_msg
+    roll 2                  ; k timer_msg timer
+    send -1                 ; k
+    return
 
 .export
     beh
