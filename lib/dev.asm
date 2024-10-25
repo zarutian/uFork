@@ -41,14 +41,17 @@ boot:                       ; () <- {caps}
     push blob_key           ; io_dev {caps} blob_key
     dict get                ; io_dev blob_dev
 
-    dup 2                   ; io_dev blob_dev io_dev blob_dev
-    push 13                 ; io_dev blob_dev io_dev blob_dev 13
-    roll -3                 ; io_dev blob_dev 13 io_dev blob_dev
-    send 2                  ; io_dev blob_dev
-
-    push 3                  ; io_dev blob_dev 3
-    roll -3                 ; 3 io_dev blob_dev
-    send 2                  ; --
+    push 13                 ; io_dev blob_dev size=13
+    pick 3                  ; io_dev blob_dev size io_dev
+    pair 1                  ; io_dev blob_dev alloc_req=(io_dev . size)
+    pick 2                  ; io_dev blob_dev alloc_req blob_dev
+    send -1                 ; io_dev blob_dev
+    push 13                 ; io_dev blob_dev size=3
+    pick 3                  ; io_dev blob_dev size io_dev
+    pair 1                  ; io_dev blob_dev alloc_req=(io_dev . size)
+    pick 2                  ; io_dev blob_dev alloc_req blob_dev
+    send -1                 ; io_dev blob_dev
+    drop 2                  ; --
 
     push 5                  ; 5
     push count              ; 5 count
@@ -59,11 +62,12 @@ boot:                       ; () <- {caps}
     msg 0                   ; msg {caps}
     push debug_key          ; msg {caps} debug_key
     dict get                ; msg debug_dev
-    push 6000               ; msg debug_dev delay=6000
-    msg 0                   ; msg debug_dev delay {caps}
-    push timer_key          ; msg debug_dev delay {caps} timer_key
-    dict get                ; msg debug_dev delay timer_dev
-    send 3                  ; --
+    push 1000               ; msg debug_dev delay=1000
+    pair 2                  ; timer_req=(delay debug_dev . msg)
+    msg 0                   ; timer_req {caps}
+    push timer_key          ; timer_req {caps} timer_key
+    dict get                ; timer_req timer_dev
+    send -1                 ; --
 
     push #nil               ; ()
     push -3                 ; () -3
@@ -80,19 +84,22 @@ boot:                       ; () <- {caps}
     push std.sink_beh       ; char sink_beh
     new 0                   ; char callback=sink.()
     push #?                 ; char callback to_cancel=#?
-    msg 0                   ; char callback to_cancel {caps}
-    push io_key             ; char callback to_cancel {caps} io_key
-    dict get                ; char callback to_cancel io_dev
-    send 3                  ; --
+    pair 2                  ; io_req=(to_cancel callback . char)
+    msg 0                   ; io_req {caps}
+    push io_key             ; io_req {caps} io_key
+    dict get                ; io_req io_dev
+    send -1                 ; --
 
-    msg 0                   ; {caps}
-    push debug_key          ; {caps} debug_key
-    dict get                ; callback=debug_dev
-    push #?                 ; callback to_cancel=#?
-    msg 0                   ; callback to_cancel {caps}
-    push io_key             ; callback to_cancel {caps} io_key
-    dict get                ; callback to_cancel io_dev
-    send 2                  ; --
+    push #?                 ; input=#?
+    msg 0                   ; input {caps}
+    push debug_key          ; input {caps} debug_key
+    dict get                ; input callback=debug_dev
+    push #?                 ; input callback to_cancel=#?
+    pair 2                  ; io_req=(to_cancel callback . input)
+    msg 0                   ; io_req {caps}
+    push io_key             ; io_req {caps} io_key
+    dict get                ; io_req io_dev
+    send -1                 ; --
 
     push 40                 ; b=40
     push -40                ; b a=-40

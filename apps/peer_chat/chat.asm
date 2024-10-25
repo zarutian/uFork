@@ -109,8 +109,9 @@ intro_cb:
     pair 2                  ; party_tx msg=(tx_tmo seq)
     pick 2                  ; party_tx msg target=party_tx
     push tx_timeout         ; party_tx msg target delay=tx_timeout
-    state 3                 ; party_tx msg target delay timer_dev
-    send 3                  ; party_tx
+    pair 2                  ; party_tx timer_req=(delay target . msg)
+    state 3                 ; party_tx timer_req timer_dev
+    send -1                 ; party_tx
 
     ; build line_out
     state 2                 ; party_tx io_dev
@@ -133,8 +134,9 @@ intro_cb:
     push #nil               ; party_tx msg=()
     my self                 ; party_tx msg target=SELF
     push rx_timeout         ; party_tx msg target delay=rx_timeout
-    state 3                 ; party_tx msg target delay timer_dev
-    send 3                  ; party_tx
+    pair 2                  ; party_tx timer_req=(delay target . msg)
+    state 3                 ; party_tx timer_req timer_dev
+    send -1                 ; party_tx
 
     ; build party_in
     push party_in_beh       ; party_tx party_in_beh
@@ -149,9 +151,12 @@ intro_cb:
     new -1                  ; callback=line_in_beh.(cust io_dev . line)
 
     ; register read callback
-    push #?                 ; callback to_cancel=#?
-    state 2                 ; callback to_cancel io_dev
-    send 2                  ; --
+    push #?                 ; callback input=#?
+    roll 2                  ; input callback
+    push #?                 ; input callback to_cancel=#?
+    pair 2                  ; io_req=(to_cancel callback . input)
+    state 2                 ; io_req io_dev
+    send -1                 ; --
 
     ref std.commit
 
@@ -211,8 +216,9 @@ greeter_beh:                ; (debug_dev timer_dev room) <- (to_cancel callback 
     pair 2                  ; room_tx msg=(tx_tmo seq)
     pick 2                  ; room_tx msg target=room_tx
     push tx_timeout         ; room_tx msg target delay=tx_timeout
-    state 2                 ; room_tx msg target delay timer_dev
-    send 3                  ; room_tx
+    pair 2                  ; room_tx timer_req=(delay target . msg)
+    state 2                 ; room_tx timer_req timer_dev
+    send -1                 ; room_tx
 
     ; build room_in
     msg 3                   ; room_tx party
@@ -238,8 +244,9 @@ greeter_beh:                ; (debug_dev timer_dev room) <- (to_cancel callback 
     push #nil               ; room_rx msg=()
     pick 2                  ; room_rx msg target=room_rx
     push rx_timeout         ; room_rx msg target delay=rx_timeout
-    state 2                 ; room_rx msg target delay timer_dev
-    send 3                  ; room_rx
+    pair 2                  ; room_rx timer_req=(delay target . msg)
+    state 2                 ; room_rx timer_req timer_dev
+    send -1                 ; room_rx
 
     ; build party->room message-limited transport
     ; push 13             ; rcvr=room_rx limit=13
@@ -415,8 +422,9 @@ link_tx_tmo:                ; (link timer ack seq msgs) <- (tx_tmo seq')
     pair 2                  ; msg=(tx_tmo seq)
     my self                 ; msg target=SELF
     push tx_timeout         ; msg target delay=tx_timeout
-    state 2                 ; msg target delay timer
-    send 3                  ; --
+    pair 2                  ; timer_req=(delay target . msg)
+    state 2                 ; timer_req timer
+    send -1                 ; --
 
     ; check timer message number
     state 4                 ; seq
@@ -469,8 +477,9 @@ link_rx_beh:                ; (cust timer tx seq) <- (ack seq' . content) | ()
     push #nil               ; msg=()
     my self                 ; msg target=SELF
     push rx_timeout         ; msg target delay=rx_timeout
-    state 2                 ; msg target delay timer
-    send 3                  ; --
+    pair 2                  ; timer_req=(delay target . msg)
+    state 2                 ; timer_req timer
+    send -1                 ; --
     ref std.commit
 
 link_rx_1:

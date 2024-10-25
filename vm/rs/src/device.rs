@@ -126,7 +126,7 @@ impl Device for IoDevice {
         let event = core.mem(ep);
         let sponsor = event.t();
         let dev = event.x();
-        let msg = event.y();  // blob | (to_cancel callback) | (to_cancel callback fixnum)
+        let msg = event.y();  // blob | (to_cancel callback . #?) | (to_cancel callback . fixnum)
         if msg.is_cap() {  // blob
             let buf = core.blob_buffer();
             let base = buf.as_ptr();
@@ -147,8 +147,8 @@ impl Device for IoDevice {
             if !callback.is_cap() {
                 return Err(E_NOT_CAP);
             }
-            let data = core.nth(msg, PLUS_3);
-            if data == UNDEF {  // (to_cancel callback)
+            let data = core.nth(msg, MINUS_2);
+            if data == UNDEF {  // (to_cancel callback . #?)
                 // read request
                 let evt = core.reserve_event(sponsor, callback, UNDEF)?;
                 let stub = core.reserve_stub(dev, evt)?;
@@ -160,11 +160,11 @@ impl Device for IoDevice {
                     core.event_enqueue(evt);
                     core.release_stub(stub);
                 }
-            } else if data.is_fix() {  // (to_cancel callback fixnum)
+            } else if data.is_fix() {  // (to_cancel callback . fixnum)
                 // write request
                 (self.write)(data);
                 // in the current implementation, `write` is synchronous, so we reply immediately
-                let result = core.reserve(&Quad::pair_t(TRUE, NIL))?;  // (#t)
+                let result = core.reserve(&Quad::pair_t(TRUE, UNDEF))?;  // (#t . #?)
                 let evt = core.reserve_event(sponsor, callback, result)?;
                 core.event_enqueue(evt);
             }
@@ -283,45 +283,50 @@ fn blob_release(core: &mut Core, handle: Any) -> Result<(), Error> {
     }
     Ok(())
 }
-fn blob_size(core: &Core, handle: Any) -> Result<Any, Error> {
+fn blob_dims(core: &Core, handle: Any) -> Result<(usize, usize), Error> {
     let pos = handle.get_fix()?;
     let top = core.blob_top().get_fix()?;
     if (pos < 5) || (pos >= top) {
-        return Err(E_BOUNDS);
+        return Err(E_BOUNDS);  // bad handle
     }
     let base = pos as usize;
     let len = get_u16(core, base - 4);
+    Ok((base, len))
+}
+fn blob_size(core: &Core, handle: Any) -> Result<Any, Error> {
+    let (_base, len) = blob_dims(core, handle)?;
     Ok(Any::fix(len as isize))
 }
 fn blob_read(core: &Core, handle: Any, ofs: Any) -> Result<Any, Error> {
-    let pos = handle.get_fix()?;
-    let top = core.blob_top().get_fix()?;
-    if (pos < 5) || (pos >= top) {
-        return Err(E_BOUNDS);
+    let (base, len) = blob_dims(core, handle)?;
+    match ofs.fix_num() {
+        Some(idx) => {
+            let ofs = idx as usize;
+            if ofs < len {
+                let byte = core.blob_read(base + ofs);
+                Ok(Any::fix(byte as isize))
+            } else {
+                Ok(UNDEF)  // out-of-bounds
+            }
+        },
+        None => Ok(UNDEF),  // fixnum expected
     }
-    let base = pos as usize;
-    let len = get_u16(core, base - 4);
-    let ofs = ofs.get_fix()? as usize;
-    if ofs >= len {
-        return Ok(UNDEF);
-    }
-    let byte = core.blob_read(base + ofs);
-    Ok(Any::fix(byte as isize))
 }
 fn blob_write(core: &mut Core, handle: Any, ofs: Any, val: Any) -> Result<Any, Error> {
-    let pos = handle.get_fix()?;
-    let top = core.blob_top().get_fix()?;
-    if (pos < 5) || (pos >= top) {
-        return Err(E_BOUNDS);
+    let (base, len) = blob_dims(core, handle)?;
+    match (ofs.fix_num(), val.fix_num()) {
+        (Some(idx), Some(dat)) => {
+            let ofs = idx as usize;
+            if ofs < len {
+                let byte = dat as u8;
+                core.blob_write(base + ofs, byte);
+                Ok(TRUE)
+            } else {
+                Ok(FALSE)  // out-of-bounds
+            }
+        },
+        _ => Ok(UNDEF),  // bad parameters
     }
-    let base = pos as usize;
-    let len = get_u16(core, base - 4);
-    let ofs = ofs.get_fix()? as usize;
-    if ofs < len {
-        let byte = val.get_fix()? as u8;
-        core.blob_write(base + ofs, byte);
-    }
-    Ok(NIL)
 }
 
 pub struct BlobDevice {
@@ -347,28 +352,30 @@ impl Device for BlobDevice {
             // request to allocated blob
             let _dev = myself.x();
             let handle = myself.y();
-            let msg = event.y();  // (cust) | (cust ofs) | (cust ofs val)
+            let msg = event.y();  // (cust . #?) | (cust . ofs) | (cust ofs . val)
             let cust = core.nth(msg, PLUS_1);
-            let ofs: Any = core.nth(msg, PLUS_2);
-            let val: Any = core.nth(msg, PLUS_3);
-            if ofs == UNDEF {  // size request
-                let size = blob_size(core, handle)?;
-                let evt = core.reserve_event(sponsor, cust, size)?;
-                core.event_enqueue(evt);
-            } else if val == UNDEF {  // read request
+            let req = core.nth(msg, MINUS_1);
+            if req.is_fix() {  // read request
+                let ofs = req;
                 let data = blob_read(core, handle, ofs)?;
                 let evt = core.reserve_event(sponsor, cust, data)?;
                 core.event_enqueue(evt);
-            } else {  // write request
-                let nil = blob_write(core, handle, ofs, val)?;
-                let evt = core.reserve_event(sponsor, cust, nil)?;
+            } else if core.typeq(PAIR_T, req) {  // write request
+                let ofs = core.nth(req, PLUS_1);
+                let val = core.nth(req, MINUS_1);
+                let ok = blob_write(core, handle, ofs, val)?;
+                let evt = core.reserve_event(sponsor, cust, ok)?;
+                core.event_enqueue(evt);
+            } else {  // size request
+                let size = blob_size(core, handle)?;
+                let evt = core.reserve_event(sponsor, cust, size)?;
                 core.event_enqueue(evt);
             }
         } else {
             // request to allocator
             let msg = event.y();  // (cust size)
             let cust = core.nth(msg, PLUS_1);
-            let size = core.nth(msg, PLUS_2);
+            let size = core.nth(msg, MINUS_1);
             let handle = blob_reserve(core, size)?;
             let proxy = core.reserve_proxy(target, handle)?;
             let evt = core.reserve_event(sponsor, cust, proxy)?;
@@ -418,13 +425,13 @@ impl Device for TimerDevice {
             // start timer request
             let arg_1 = core.nth(msg, PLUS_1);
             if arg_1.is_fix() {  // simple delayed message
-                // (delay target message)
+                // (delay target . message)
                 let delay = arg_1;
                 let target = core.nth(msg, PLUS_2);
                 if !target.is_cap() {
                     return Err(E_NOT_CAP);
                 }
-                let message = core.nth(msg, PLUS_3);
+                let message = core.nth(msg, MINUS_2);
                 let delayed = Quad::new_event(sponsor, target, message);
                 let ptr = core.reserve(&delayed)?;
                 let stub = core.reserve_stub(dev, ptr)?;
