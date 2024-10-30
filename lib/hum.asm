@@ -1,9 +1,10 @@
 ; Runtime support for compiled Humus.
 
 .import
-    div_mod: "https://ufork.org/lib/div_mod.asm"
-    dev: "https://ufork.org/lib/dev.asm"
-    std: "https://ufork.org/lib/std.asm"
+    div_mod: "./div_mod.asm"
+    dev: "./dev.asm"
+    eq: "./eq.asm"
+    std: "./std.asm"
 
 push_op:
     ref 2
@@ -107,11 +108,11 @@ execute_k:
 ; and calls it. If the returned value is a block, it is executed for its
 ; effects. Otherwise the transaction is aborted.
 
-; Use 'beh' with 'beh -1' or 'new -1', for example:
+; Use 'beh' with 'actor become' or 'actor create', for example:
 
 ;   push closure            ; closure
 ;   push hum.beh            ; closure beh
-;   beh -1                  ; actor=beh.closure
+;   actor become            ; actor=beh.closure
 
 beh:                        ; closure <- msg
     push std.commit         ; commit
@@ -140,7 +141,7 @@ random_adapter_beh:         ; random_dev <- (cust . n)
     msg 1                   ; limit cust
     pair 1                  ; (cust . limit)
     state 0                 ; (cust . limit) random_dev
-    send -1                 ; --
+    actor send              ; --
     ref std.commit
 
 timer_adapter_beh:          ; timer_dev <- (dt msg . actor)
@@ -149,7 +150,7 @@ timer_adapter_beh:          ; timer_dev <- (dt msg . actor)
     msg 1                   ; msg target delay=dt
     pair 2                  ; timer_req=(delay target . msg)
     state 0                 ; timer_req timer_dev
-    send -1                 ; --
+    actor send              ; --
     ref std.commit
 
 prepare_env:                ; ( k -- env )
@@ -163,13 +164,13 @@ prepare_env:                ; ( k -- env )
     push dev.timer_key      ; k #? println {caps} timer_key
     dict get                ; k #? println timer_dev
     push timer_adapter_beh  ; k #? println timer_dev timer_adapter_beh
-    new -1                  ; k #? println timer=timer_adapter_beh.timer_dev
+    actor create            ; k #? println timer=timer_adapter_beh.timer_dev
 
     msg 0                   ; k #? println timer {caps}
     push dev.random_key     ; k #? println timer {caps} random_key
     dict get                ; k #? println timer random_dev
     push random_adapter_beh ; k #? println timer random_dev random_adapter_beh
-    new -1                  ; k #? println timer random=random_adapter_beh.random_dev
+    actor create            ; k #? println timer random=random_adapter_beh.random_dev
 
     msg 0                   ; k #? println timer random {caps}
     push dev.io_key         ; k #? println timer random {caps} io_key
@@ -219,34 +220,10 @@ eq:                         ; ( pair -- boolean )
     roll -2                 ; k pair
     dup 1                   ; k pair pair
     typeq #pair_t           ; k pair is_pair(pair)
-    if_not dreturn_f        ; k pair=(a . b)
+    if_not dreturn_undef    ; k pair=(a . b)
     part 1                  ; k b a
-    ref eq_tail
-eq_parted:                  ; ( b a -- boolean )
-    roll -3                 ; k b a
-eq_tail:                    ; k b a
-    dup 2                   ; k b a b a
-    cmp eq                  ; k b a b==a
-    if eq_t                 ; k b a
-    dup 1                   ; k b a a
-    typeq #pair_t           ; k b a is_pair(a)
-    if_not eq_f             ; k b a
-    roll 2                  ; k a b
-    dup 1                   ; k a b b
-    typeq #pair_t           ; k a b is_pair(b)
-    if_not eq_f             ; k a b
-    part 1                  ; k a tl(b) hd(b)
-    roll 3                  ; k tl(b) hd(b) a
-    part 1                  ; k tl(b) hd(b) tl(a) hd(a)
-    roll 3                  ; k tl(b) tl(a) hd(a) hd(b)
-    call eq_parted          ; k tl(b) tl(a) hd(b)==hd(a)
-    if eq_tail              ; k tl(b) tl(a)
-eq_f:                       ; k b a
-    drop 2                  ; k
-    ref std.return_f
-eq_t:                       ; k b a
-    drop 2                  ; k
-    ref std.return_t
+    call eq.proc            ; k boolean
+    ref std.return_value
 
 list_of_3:
     pair_t 3 #nil           ; (3)
@@ -277,7 +254,7 @@ test_eq:                    ; ( -- )
 
     push 42                 ; k 42
     call eq                 ; k ???
-    assert #f               ; k
+    assert #?               ; k
     return
 
 not:                        ; ( value -- boolean | #? )
@@ -440,7 +417,7 @@ test_predicates:            ; ( -- )
 
     push #?                 ; k #?
     push std.sink_beh       ; k #? sink_beh
-    new -1                  ; k sink=sink_beh.#?
+    actor create            ; k sink=sink_beh.#?
     call is_actor           ; k actual
     assert #t               ; k
     push is_actor           ; k value
@@ -627,25 +604,29 @@ test_cmp:                   ; ( -- )
 
 ; Test suite.
 
-boot:
-    ref test
+boot:                       ; _ <- {caps}
+    msg 0                   ; {caps}
+    push dev.debug_key      ; {caps} debug_key
+    dict get                ; judge=debug
+    ref suite
 
 test:                       ; judge <- {caps}
-    call test_alu           ; --
-    call test_and           ; --
-    call test_cmp           ; --
-    call test_compare       ; --
-    call test_div           ; --
-    call test_eq            ; --
-    call test_mod           ; --
-    call test_neg           ; --
-    call test_not           ; --
-    call test_or            ; --
-    call test_predicates    ; --
-    push #t                 ; verdict=#t
-    state 0                 ; verdict judge
-    send -1                 ; --
-    ref std.commit
+    state 0                 ; judge
+suite:
+    call test_alu           ; judge
+    call test_and           ; judge
+    call test_cmp           ; judge
+    call test_compare       ; judge
+    call test_div           ; judge
+    call test_eq            ; judge
+    call test_mod           ; judge
+    call test_neg           ; judge
+    call test_not           ; judge
+    call test_or            ; judge
+    call test_predicates    ; judge
+    push #t                 ; judge verdict=#t
+    roll 2                  ; verdict judge
+    ref std.send_msg
 
 .export
     add

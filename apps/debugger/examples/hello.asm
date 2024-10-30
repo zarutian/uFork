@@ -13,7 +13,7 @@ hello:                      ; (+72 +101 +108 +108 +111 +63 +10)
     pair_t '\n'
     ref #nil
 
-boot:                       ; () <- {caps}
+boot:                       ; _ <- {caps}
     push hello              ; value
     msg 0                   ; value {caps}
     push dev.debug_key      ; value {caps} dev.debug_key
@@ -21,7 +21,7 @@ boot:                       ; () <- {caps}
 ;    msg 0               ; ... debug_dev {caps}
 ;    push dev.clock_key  ; ... debug_dev {caps} dev.clock_key
 ;    dict get            ; ... cust=debug_dev clock_dev
-    send -1                 ; --
+    actor send              ; --
     end commit
 
 .export

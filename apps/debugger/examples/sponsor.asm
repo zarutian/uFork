@@ -8,7 +8,7 @@
 
 ; Sponsor controller that refills all quotas
 
-refill:                     ; (memory events cycles) <- sponsor
+refill:                     ; (memory events . cycles) <- sponsor
     msg 0                   ; sponsor
     quad -4                 ; error=Z Y X T
     drop 3                  ; error
@@ -31,13 +31,13 @@ refill_0:
     sponsor memory          ; ... sponsor
     state 2                 ; ... sponsor events
     sponsor events          ; ... sponsor
-    state 3                 ; ... sponsor cycles
+    state -2                ; ... sponsor cycles
     sponsor cycles          ; ... sponsor
     my self                 ; ... sponsor control=SELF
     sponsor start           ; ...
     ref std.commit
 
-start:                      ; (debug_dev) <- ()
+start:                      ; debug_dev <- _
     sponsor new             ; sponsor
     push 48                 ; sponsor 48
     sponsor memory          ; sponsor
@@ -46,34 +46,41 @@ start:                      ; (debug_dev) <- ()
     push 64                 ; sponsor 64
     sponsor cycles          ; sponsor
     dup 1                   ; sponsor sponsor
-    state 1                 ; sponsor sponsor debug_dev
+    state 0                 ; sponsor sponsor debug_dev
     push control_1          ; sponsor sponsor debug_dev control_1
-    new 1                   ; sponsor sponsor control_1.(debug_dev)
+    actor create            ; sponsor sponsor control_1.debug_dev
     sponsor start           ; sponsor
-    push start_1            ; sponsor start_1
-    new 0                   ; sponsor start_1.()
-    signal 0                ; --
+    push #?                 ; sponsor msg=#?
+    push #?                 ; sponsor msg #?
+    push start_1            ; sponsor msg #? start_1
+    actor create            ; sponsor msg actor=start_1.#?
+    actor post              ; --
     ref std.commit
 
-start_1:                    ; () <- ()
-    push msg_bomb           ; msg_bomb
-    new 0                   ; msg_bomb.()
-    send 0                  ; --
-    push fork_bomb          ; fork_bomb
-    new 0                   ; fork_bomb.()
-    send 0                  ; --
+start_1:                    ; _ <- _
+    push #?                 ; #?
+    push #?                 ; #? #?
+    push msg_bomb           ; #? #? msg_bomb
+    actor create            ; #? msg_bomb.#?
+    actor send              ; --
+    push #?                 ; #?
+    push #?                 ; #? #?
+    push fork_bomb          ; #? #? fork_bomb
+    actor create            ; #? fork_bomb.#?
+    actor send              ; --
     push 0                  ; 0
-    push count_to           ; 0 count_to
-    new 0                   ; 0 count_to.()
+    push #?                 ; 0 #?
+    push count_to           ; 0 #? count_to
+    actor create            ; 0 count_to.#?
     ref std.send_msg
 
-control_1:                  ; (debug_dev) <- sponsor
+control_1:                  ; debug_dev <- sponsor
     msg 0                   ; sponsor
     quad -4                 ; error=Z Y X T
     drop 3                  ; error
     msg 0                   ; error sponsor
     sponsor stop            ; error
-    state 1                 ; error debug_dev
+    state 0                 ; error debug_dev
     ref std.send_msg
 
 ; An infinite loop will consume cycles, but no memory or events
@@ -81,43 +88,40 @@ control_1:                  ; (debug_dev) <- sponsor
 loop_forever:
     dup 0 loop_forever
 
-; Send yourself an incrementing number forever.
-
-ticker:                     ; () <- n
-    msg 0                   ; n
-    push 1                  ; n 1
-    alu add                 ; n+1
-    my self                 ; n+1 SELF
-    ref std.send_msg        ; --
-
 ; Send yourself two messages for each one received.
 
-msg_bomb:                   ; () <- ()
-    my self                 ; SELF
-    send 0                  ; --
-    my self                 ; SELF
-    send 0                  ; --
+msg_bomb:                   ; _ <- _
+    push #?                 ; #?
+    my self                 ; #? SELF
+    actor send              ; --
+    push #?                 ; #?
+    my self                 ; #? SELF
+    actor send              ; --
     ref std.commit
 
 ; Create and activate two clones for each message received.
 
-fork_bomb:                  ; () <- ()
-    push fork_bomb          ; fork_bomb
-    new 0                   ; fork_bomb.()
-    send 0                  ; --
-    push fork_bomb          ; fork_bomb
-    new 0                   ; fork_bomb.()
-    send 0                  ; --
+fork_bomb:                  ; _ <- _
+    push #?                 ; #?
+    push #?                 ; #? #?
+    push fork_bomb          ; #? #? fork_bomb
+    actor create            ; #? fork_bomb.#?
+    actor send              ; --
+    push #?                 ; #?
+    push #?                 ; #? #?
+    push fork_bomb          ; #? #? fork_bomb
+    actor create            ; #? fork_bomb.#?
+    actor send              ; --
     ref std.commit
 
-; Count up to a specified `limit`
+; Count up to a specified `limit` (forever, if `limit==#?`).
 
-count_to:                   ; (limit) <- count
-    state 1                 ; limit
+count_to:                   ; limit <- count
+    state 0                 ; limit
     typeq #fixnum_t         ; typeof(limit)==#fixnum_t
     if_not count_next       ; --
     msg 0                   ; count
-    state 1                 ; count limit
+    state 0                 ; count limit
     cmp ge                  ; count>=limit
     if std.commit           ; --
 count_next:
@@ -127,13 +131,14 @@ count_next:
     my self                 ; count+1 SELF
     ref std.send_msg
 
-boot:                       ; () <- {caps}
-    msg 0                   ; {caps}
-    push dev.debug_key      ; {caps} debug_key
-    dict get                ; debug_dev
-    push start              ; debug_dev start
-    new 1                   ; start.(debug_dev)
-    send 0                  ; --
+boot:                       ; _ <- {caps}
+    push #?                 ; #?
+    msg 0                   ; #? {caps}
+    push dev.debug_key      ; #? {caps} debug_key
+    dict get                ; #? debug_dev
+    push start              ; #? debug_dev start
+    actor create            ; #? start.debug_dev
+    actor send              ; --
 
     sponsor new             ; sponsor
     push 1                  ; sponsor 1
@@ -142,12 +147,15 @@ boot:                       ; () <- {caps}
     push 16                 ; sponsor sponsor cycles=8
     push 4                  ; sponsor sponsor cycles events=3
     push 8                  ; sponsor sponsor cycles events memory=5
-    push refill             ; sponsor sponsor cycles event memory refill
-    new 3                   ; sponsor sponsor refill.(memory events cycles)
+    pair 2                  ; sponsor sponsor (memory events . cycles)
+    push refill             ; sponsor sponsor (memory events . cycles) refill
+    actor create            ; sponsor sponsor refill.(memory events . cycles)
     sponsor start           ; sponsor
-    push loop_forever       ; sponsor loop_forever
-    new 0                   ; sponsor loop_forever.()
-    signal 0                ; --
+    push #?                 ; sponsor msg=#?
+    push #?                 ; sponsor msg #?
+    push loop_forever       ; sponsor msg #? loop_forever
+    actor create            ; sponsor msg actor=loop_forever.#?
+    actor post              ; --
 
     ref std.commit
 

@@ -1,12 +1,19 @@
-#![no_std]
+#![cfg_attr(feature = "no_std", no_std)]
+
+extern crate alloc;
+
+use alloc::boxed::Box;
 
 use ::core::cell::RefCell;
 
-pub mod host;
+pub mod debug_dev;
+pub mod clock_dev;
+pub mod timer_dev;
+pub mod io_dev;
+pub mod random_dev;
+pub mod host_dev;
 
-use ufork::{any::Any, quad::Quad, Error, Raw};
-
-use crate::host::*;
+use ufork::{core::*, any::Any, quad::Quad, Raw};
 
 #[panic_handler]
 #[cfg(not(test))]
@@ -30,134 +37,146 @@ fn out_of_memory(_: ::core::alloc::Layout) -> ! {
 
 #[link(wasm_import_module = "capabilities")]
 extern "C" {
-    pub fn host_clock() -> Raw;
-    pub fn host_random(a: Raw, b: Raw) -> Raw;
-    pub fn host_print(base: *const u8, ofs: usize);
-    pub fn host_log(x: Raw);
-    pub fn host_start_timer(delay: Raw, stub: Raw);
-    pub fn host_stop_timer(stub: Raw) -> bool;
-    pub fn host_write(code: Raw) -> Raw;
-    pub fn host_read(stub: Raw) -> Raw;
     pub fn host_trace(event: Raw);
-    pub fn host(event_stub_or_proxy: Raw) -> Error;
 }
 
-// trace transactional effect(s)
-#[cfg(target_arch = "wasm32")]
-pub fn trace_event(ep: Any, _kp: Any) {
-    unsafe {
-        host_trace(ep.raw());
-    }
-}
-#[cfg(not(target_arch = "wasm32"))]
-pub fn trace_event(ep: Any, _kp: Any) {
-    // event tracing not available
-    let _ = ep; // place a breakpoint on this assignment
+/* Static Singleton per Kevin Reid */
+fn the_core() -> &'static RefCell<Core> {
+    struct SingletonCore(RefCell<Core>);
+    // SAFETY: intrinsically single-threaded environment, so synchronization is unnecessary.
+    unsafe impl Sync for SingletonCore {}
+    static THE_CORE: SingletonCore = SingletonCore(RefCell::new(Core::new()));
+
+    &THE_CORE.0
 }
 
-unsafe fn the_host() -> &'static RefCell<Host> {
-    static mut THE_HOST: Option<RefCell<Host>> = None;
-
-    match &THE_HOST {
-        Some(host) => host,
-        None => {
-            THE_HOST = Some(RefCell::new(Host::new()));
-            the_host()
+#[no_mangle]
+pub fn h_init() {
+    // prepare the core for runtime use before any other entry-point is called
+    let mut core = the_core().borrow_mut();
+    core.init();
+    core.install_device(DEBUG_DEV, Box::new(debug_dev::DebugDevice::new()));
+    core.install_device(CLOCK_DEV, Box::new(clock_dev::ClockDevice::new()));
+    core.install_device(IO_DEV, Box::new(io_dev::IoDevice::new()));
+    core.install_device(BLOB_DEV, Box::new(ufork::blob_dev::BlobDevice::new()));
+    core.install_device(TIMER_DEV, Box::new(timer_dev::TimerDevice::new()));
+    core.install_device(RANDOM_DEV, Box::new(random_dev::RandomDevice::new()));
+    core.install_device(HOST_DEV, Box::new(host_dev::HostDevice::new()));
+    core.set_trace_event(|ep, _kp| {
+        unsafe {
+            host_trace(ep.raw());
         }
-    }
+    });
 }
 
 #[no_mangle]
 pub fn h_run_loop(limit: i32) -> Raw {
-    unsafe { the_host().borrow_mut().run_loop(limit) }
+    let mut core = the_core().borrow_mut();
+    core.run_loop(limit).raw()
 }
 
 #[no_mangle]
 pub fn h_event_enqueue(evt: Raw) {
-    unsafe { the_host().borrow_mut().event_enqueue(evt) }
+    let mut core = the_core().borrow_mut();
+    let ep = Any::new(evt);
+    core.event_enqueue(ep)
 }
 
 #[no_mangle]
 pub fn h_revert() -> bool {
-    unsafe { the_host().borrow_mut().actor_revert() }
+    let mut core = the_core().borrow_mut();
+    core.actor_revert()
 }
 
 #[no_mangle]
 pub fn h_gc_run() {
-    unsafe { the_host().borrow_mut().gc_run() }
-}
-
-#[no_mangle]
-pub fn h_rom_buffer() -> *const Quad {
-    unsafe { the_host().borrow().rom_buffer() }
+    let mut core = the_core().borrow_mut();
+    core.gc_collect()
 }
 
 #[no_mangle]
 pub fn h_rom_top() -> Raw {
-    unsafe { the_host().borrow().rom_top() }
+    let core = the_core().borrow();
+    core.rom_top().raw()
 }
 
 #[no_mangle]
 pub fn h_set_rom_top(top: Raw) {
-    unsafe { the_host().borrow_mut().set_rom_top(top) }
+    let mut core = the_core().borrow_mut();
+    let ptr = Any::new(top);
+    core.set_rom_top(ptr);
 }
 
 #[no_mangle]
 pub fn h_reserve_rom() -> Raw {
-    unsafe { the_host().borrow_mut().reserve_rom() }
-}
-
-#[no_mangle]
-pub fn h_ram_buffer() -> *const Quad {
-    unsafe { the_host().borrow().ram_buffer() }
+    let mut core = the_core().borrow_mut();
+    core.reserve_rom().unwrap().raw()
 }
 
 #[no_mangle]
 pub fn h_ram_top() -> Raw {
-    unsafe { the_host().borrow().ram_top() }
+    let core = the_core().borrow();
+    core.ram_top().raw()
 }
 
 #[no_mangle]
 pub fn h_reserve() -> Raw {
-    unsafe { the_host().borrow_mut().reserve() }
+    let mut core = the_core().borrow_mut();
+    core.reserve(&Quad::empty_t()).unwrap().raw()
 }
 
 #[no_mangle]
 pub fn h_reserve_stub(device: Raw, target: Raw) -> Raw {
-    unsafe { the_host().borrow_mut().reserve_stub(device, target) }
+    let mut core = the_core().borrow_mut();
+    let device_ptr = Any::new(device);
+    let target_ptr = Any::new(target);
+    core.reserve_stub(device_ptr, target_ptr).unwrap().raw()
 }
 
 #[no_mangle]
 pub fn h_release_stub(ptr: Raw) {
-    unsafe { the_host().borrow_mut().release_stub(ptr) }
-}
-
-#[no_mangle]
-pub fn h_blob_buffer() -> *const u8 {
-    unsafe { the_host().borrow().blob_buffer() }
-}
-
-#[no_mangle]
-pub fn h_blob_top() -> Raw {
-    unsafe { the_host().borrow().blob_top() }
+    let mut core = the_core().borrow_mut();
+    core.release_stub(Any::new(ptr))
 }
 
 #[no_mangle]
 pub fn h_car(raw: Raw) -> Raw {
-    unsafe { the_host().borrow().car(raw) }
+    let core = the_core().borrow();
+    core.car(Any::new(raw)).raw()
 }
 
 #[no_mangle]
 pub fn h_cdr(raw: Raw) -> Raw {
-    unsafe { the_host().borrow().cdr(raw) }
+    let core = the_core().borrow();
+    core.cdr(Any::new(raw)).raw()
 }
 
 #[no_mangle]
 pub fn h_gc_color(raw: Raw) -> Raw {
-    unsafe { the_host().borrow().gc_color(raw) }
+    let core = the_core().borrow();
+    core.gc_color(Any::new(raw)).raw()
 }
 
 #[no_mangle]
 pub fn h_gc_state() -> Raw {
-    unsafe { the_host().borrow().gc_state() }
+    let core = the_core().borrow();
+    core.gc_state().raw()
+}
+
+/*
+*  WARNING! The methods below give _unsafe_ access
+*  to the underlying buffers. They are intended
+*  to provide access (read/write) to WASM Host.
+*/
+
+#[no_mangle]
+pub fn h_rom_buffer() -> *const Quad {
+    let core = the_core().borrow();
+    core.rom_buffer().as_ptr()
+}
+
+#[no_mangle]
+pub fn h_ram_buffer() -> *const Quad {
+    let core = the_core().borrow();
+    core.ram_buffer().as_ptr()
 }

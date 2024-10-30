@@ -6,7 +6,7 @@
     std: "./std.asm"
 
 ;;  DEF sink_beh AS \_.[]
-sink_beh:                   ; () <- _
+sink_beh:                   ; _ <- _
     ref std.sink_beh        ; re-export
 
 ;;  DEF const_beh(value) AS \(cust, _).[
@@ -27,10 +27,10 @@ fwd_beh:                    ; rcvr <- msg
 ;;  DEF init_fwd_beh AS \rcvr.[
 ;;      BECOME fwd_beh(rcvr)
 ;;  ]
-init_fwd_beh:               ; () <- rcvr
+init_fwd_beh:               ; _ <- rcvr
     msg 0                   ; rcvr
     push fwd_beh            ; rcvr fwd_beh
-    beh -1                  ; --
+    actor become            ; --
     ref std.commit
 
 ;;  DEF once_beh(rcvr) AS \msg.[
@@ -38,9 +38,9 @@ init_fwd_beh:               ; () <- rcvr
 ;;      SEND msg TO rcvr
 ;;  ]
 once_beh:                   ; rcvr <- msg
-    push #nil               ; ()
-    push sink_beh           ; () sink_beh
-    beh -1                  ; --
+    push #?                 ; #?
+    push sink_beh           ; #? sink_beh
+    actor become            ; --
     ref fwd_beh
 
 ;;  DEF label_beh(rcvr, label) AS \msg.[
@@ -68,9 +68,9 @@ tag_beh:                    ; rcvr <- msg
 ;;      SEND (SELF, msg) TO rcvr
 ;;  ]
 once_tag_beh:               ; rcvr <- msg
-    push #nil               ; ()
-    push sink_beh           ; () sink_beh
-    beh -1                  ; --
+    push #?                 ; #?
+    push sink_beh           ; #? sink_beh
+    actor become            ; --
     ref tag_beh
 
 ;;  DEF relay_beh(rcvr, msg) AS \_.[
@@ -90,7 +90,7 @@ relay_beh:                  ; (rcvr . msg) <- _
 tee_beh:                    ; (rcvr1 . rcvr2) <- msg
     msg 0                   ; msg
     state 1                 ; msg rcvr1
-    send -1                 ; --
+    actor send              ; --
     msg 0                   ; msg
     state -1                ; msg rcvr2
     ref std.send_msg
@@ -111,7 +111,7 @@ broadcast_beh:              ; value <- actors
     part 1                  ; rest first
     state 0                 ; rest first value
     roll 2                  ; rest value first
-    send -1                 ; rest
+    actor send              ; rest
     my self                 ; rest SELF
     ref std.send_msg
 

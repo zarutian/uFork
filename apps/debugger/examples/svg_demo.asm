@@ -127,10 +127,10 @@ str_out:                    ; (cb out . str) <- result
     push #?                 ; rest out cb code callback to_cancel=#?
     pair 2                  ; rest out cb req=(to_cancel callback . code)
     state 2                 ; rest out cb req out
-    send -1                 ; rest out cb
+    actor send              ; rest out cb
     pair 2                  ; (cb out . rest)
     push str_out            ; (cb out . str=rest) str_out
-    beh -1                  ; --
+    actor become            ; --
     ref std.commit
 
 str_end:                    ; --
@@ -138,18 +138,18 @@ str_end:                    ; --
     state 1                 ; result cb
     ref std.send_msg
 
-boot:                       ; () <- {caps}
-    push svg_cmds           ; svg_cmds
-    msg 0                   ; svg_cmds {caps}
-    push dev.svg_key        ; svg_cmds {caps} svg_key
-    dict get                ; svg_cmds svg_dev
-    push std.sink_beh       ; svg_cmds svg_dev sink_beh
-    new 0                   ; str=svg_cmds out=svg_dev cb=sink_beh.()
-    pair 2                  ; (cb out . str)
-    push str_out            ; (cb out . str) str_out
-    new -1                  ; str_out.(cb out . str)
-    send 0                  ; --
-    ref std.commit
+boot:                       ; _ <- {caps}
+    push svg_cmds           ; #? str=svg_cmds
+    msg 0                   ; #? str {caps}
+    push dev.svg_key        ; #? str {caps} svg_key
+    dict get                ; #? str out=svg_dev
+    push #?                 ; #? str out #?
+    push std.sink_beh       ; #? str out #? sink_beh
+    actor create            ; #? str out cb=sink_beh.#?
+    pair 2                  ; #? (cb out . str)
+    push str_out            ; #? (cb out . str) str_out
+    actor create            ; #? str_out.(cb out . str)
+    ref std.send_msg
 
 .export
     boot

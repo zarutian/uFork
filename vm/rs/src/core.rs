@@ -3,24 +3,25 @@
 use alloc::boxed::Box;
 
 use crate::*;
-use crate::device::*;
 
-pub const ROM_BASE_OFS: usize = 16;  // ROM offsets below this value are reserved
+pub const MEMORY: Any       = Any::ram(0x0);
+pub const DDEQUE: Any       = Any::ram(0x1);
+pub const DEBUG_DEV: Any    = Any::cap(0x2);
+pub const CLOCK_DEV: Any    = Any::cap(0x3);
+pub const IO_DEV: Any       = Any::cap(0x4);
+pub const BLOB_DEV: Any     = Any::cap(0x5);
+pub const TIMER_DEV: Any    = Any::cap(0x6);
+pub const NULL_DEV: Any     = Any::cap(0x7);
+pub const HOST_DEV: Any     = Any::cap(0x8);
+pub const RANDOM_DEV: Any   = Any::cap(0x9);
+pub const RSVD_A_DEV: Any   = Any::cap(0xA);
+pub const RSVD_B_DEV: Any   = Any::cap(0xB);
+pub const RSVD_C_DEV: Any   = Any::cap(0xC);
+pub const RSVD_D_DEV: Any   = Any::cap(0xD);
+pub const RSVD_E_DEV: Any   = Any::cap(0xE);
+pub const SPONSOR: Any      = Any::ram(0xF);
 
-pub const MEMORY: Any       = Any { raw: MUT_RAW | 0 };
-pub const DDEQUE: Any       = Any { raw: MUT_RAW | 1 };
-//pub const NULL_DEV: Any    = Any { raw: MUT_RAW | OPQ_RAW | 2 };
-pub const DEBUG_DEV: Any    = Any { raw: MUT_RAW | OPQ_RAW | 2 };
-pub const CLOCK_DEV: Any    = Any { raw: MUT_RAW | OPQ_RAW | 3 };
-pub const IO_DEV: Any       = Any { raw: MUT_RAW | OPQ_RAW | 4 };
-pub const BLOB_DEV: Any     = Any { raw: MUT_RAW | OPQ_RAW | 5 };
-pub const TIMER_DEV: Any    = Any { raw: MUT_RAW | OPQ_RAW | 6 };
-pub const MEMO_DEV: Any     = Any { raw: MUT_RAW | OPQ_RAW | 7 };  // FIXME: MEMO deprecated. replace with NULL?
-pub const HOST_DEV: Any     = Any { raw: MUT_RAW | OPQ_RAW | 8 };
-pub const RANDOM_DEV: Any   = Any { raw: MUT_RAW | OPQ_RAW | 9 };
-pub const SPONSOR: Any      = Any { raw: MUT_RAW | 15 };
-
-pub const RAM_BASE_OFS: usize = 16;  // RAM offsets below this value are reserved
+pub const RAM_BASE_OFS: usize = 0x10;  // RAM offsets below this value are reserved
 
 pub const GC_FIRST: usize   = 0;  // offset of "first" in gc_queue[]
 pub const GC_LAST: usize    = 1;  // offset of "last" in gc_queue[]
@@ -28,176 +29,134 @@ pub const GC_STRIDE: usize  = 16;  // number of steps to take for each GC increm
 pub const GC_BLACK: Any     = TRUE;
 pub const GC_WHITE: Any     = FALSE;
 
-// core limits (repeated in `index.js`)
+// core limits (repeated in `ufork.js`)
 //const QUAD_ROM_MAX: usize = 1<<10;  // 1K quad-cells of ROM
-const QUAD_ROM_MAX: usize = 1<<12;  // 4K quad-cells of ROM
+//const QUAD_ROM_MAX: usize = 1<<12;  // 4K quad-cells of ROM
+const QUAD_ROM_MAX: usize = 1<<13;  // 8K quad-cells of ROM (FPGA size)
+//const QUAD_ROM_MAX: usize = 1<<14;  // 16K quad-cells of ROM
 //const QUAD_RAM_MAX: usize = 1<<8;   // 256 quad-cells of RAM
-const QUAD_RAM_MAX: usize = 1<<10;   // 1K quad-cells of RAM
-//const QUAD_RAM_MAX: usize = 1<<12;   // 4K quad-cells of RAM
-//const BLOB_RAM_MAX: usize = 64;     // 64 octets of Blob RAM (for testing)
-const BLOB_RAM_MAX: usize = 1<<8;   // 256 octets of Blob RAM (for testing)
-//const BLOB_RAM_MAX: usize = 1<<10;  // 1K octets of Blob RAM
-//const BLOB_RAM_MAX: usize = 1<<12;  // 4K octets of Blob RAM
-//const BLOB_RAM_MAX: usize = 1<<16;  // 64K octets of Blob RAM (maximum value)
-const DEVICE_MAX:   usize = 8;      // number of Core devices
+//const QUAD_RAM_MAX: usize = 1<<10;   // 1K quad-cells of RAM
+const QUAD_RAM_MAX: usize = 1<<12;   // 4K quad-cells of RAM (FPGA size)
+const DEVICE_MAX:   usize = 13;     // number of Core devices
 
-pub struct Core<
+pub struct Core <
     const QUAD_ROM_SIZE: usize = QUAD_ROM_MAX,
     const QUAD_RAM_SIZE: usize = QUAD_RAM_MAX,
-    const GC_QUEUE_SIZE: usize = QUAD_RAM_MAX,
-    const BLOB_RAM_SIZE: usize = BLOB_RAM_MAX,
 > {
     quad_rom:   [Quad; QUAD_ROM_SIZE],
     quad_ram:   [Quad; QUAD_RAM_SIZE],
-    gc_queue:   [Any; GC_QUEUE_SIZE],
-    blob_ram:   [u8; BLOB_RAM_SIZE],
-    device:     [Option<Box<dyn Device>>; DEVICE_MAX],
-    rom_top:    Any,
+    gc_queue:   [Any; QUAD_RAM_SIZE],
     gc_state:   Any,
-
-
-    trace_event: Box<dyn Fn(Any, Any)>,
+    rom_top:    Any,
+    device:     [Option<Box<dyn Device>>; DEVICE_MAX],
+    trace_fn:   Option<Box<dyn Fn(Any, Any)>>,
 }
 
 impl Default for Core {
     fn default() -> Self {
-        Self::new(
-            CoreDevices::default(),
-        )
+        Self::new()
     }
 }
 
-#[derive(Default)]
-pub struct CoreDevices {
-    pub debug_device: DebugDevice,
-    pub clock_device: ClockDevice,
-    pub random_device: RandomDevice,
-    pub io_device: IoDevice,
-    pub blob_device: BlobDevice,
-    pub timer_device: TimerDevice,
-    pub host_device: HostDevice,
-}
-
 impl Core {
-    pub fn new(
-        core_devices: CoreDevices,
-    ) -> Core {
+    pub const fn new() -> Core {
+        Core {
+            quad_rom: [ Quad::empty_t(); QUAD_ROM_MAX ],
+            quad_ram: [ Quad::empty_t(); QUAD_RAM_MAX ],
+            gc_queue: [ UNDEF; QUAD_RAM_MAX ],
+            gc_state: UNDEF,
+            rom_top: Any::rom(ROM_BASE_OFS),
+            device: [
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            trace_fn: None,
+        }
+    }
 
+    pub fn init(&mut self) {  // runtime initialization
         /*
          * Read-Only Memory (ROM) image (read/execute)
          */
-        let mut quad_rom = [
-            Quad::empty_t();
-            QUAD_ROM_MAX
-        ];
-
-        quad_rom[UNDEF.ofs()]       = Quad::literal_t();
-        quad_rom[NIL.ofs()]         = Quad::literal_t();
-        quad_rom[FALSE.ofs()]       = Quad::literal_t();
-        quad_rom[TRUE.ofs()]        = Quad::literal_t();
-        quad_rom[ROM_04.ofs()]      = Quad::literal_t();
-        quad_rom[EMPTY_DQ.ofs()]    = Quad::pair_t(NIL, NIL);
-        quad_rom[TYPE_T.ofs()]      = Quad::type_t(PLUS_1);
-        quad_rom[FIXNUM_T.ofs()]    = Quad::type_t(UNDEF);
-        quad_rom[ACTOR_T.ofs()]     = Quad::type_t(PLUS_2);
-        quad_rom[PROXY_T.ofs()]     = Quad::type_t(PLUS_2);
-        quad_rom[STUB_T.ofs()]      = Quad::type_t(PLUS_2);
-        quad_rom[INSTR_T.ofs()]     = Quad::type_t(PLUS_3);
-        quad_rom[PAIR_T.ofs()]      = Quad::type_t(PLUS_2);
-        quad_rom[DICT_T.ofs()]      = Quad::type_t(PLUS_3);
-        quad_rom[FWD_REF_T.ofs()]   = Quad::type_t(MINUS_1);
-        quad_rom[FREE_T.ofs()]      = Quad::type_t(ZERO);
-
-pub const ROM_TOP_OFS: usize = ROM_BASE_OFS;
+        self.quad_rom[UNDEF.ofs()]       = Quad::literal_t();
+        self.quad_rom[NIL.ofs()]         = Quad::literal_t();
+        self.quad_rom[FALSE.ofs()]       = Quad::literal_t();
+        self.quad_rom[TRUE.ofs()]        = Quad::literal_t();
+        self.quad_rom[ROM_04.ofs()]      = Quad::literal_t();
+        self.quad_rom[EMPTY_DQ.ofs()]    = Quad::pair_t(NIL, NIL);
+        self.quad_rom[TYPE_T.ofs()]      = Quad::type_t(PLUS_1);
+        self.quad_rom[FIXNUM_T.ofs()]    = Quad::type_t(UNDEF);
+        self.quad_rom[ACTOR_T.ofs()]     = Quad::type_t(PLUS_2);
+        self.quad_rom[PROXY_T.ofs()]     = Quad::type_t(PLUS_2);
+        self.quad_rom[STUB_T.ofs()]      = Quad::type_t(PLUS_2);
+        self.quad_rom[INSTR_T.ofs()]     = Quad::type_t(PLUS_3);
+        self.quad_rom[PAIR_T.ofs()]      = Quad::type_t(PLUS_2);
+        self.quad_rom[DICT_T.ofs()]      = Quad::type_t(PLUS_3);
+        self.quad_rom[FWD_REF_T.ofs()]   = Quad::type_t(MINUS_1);
+        self.quad_rom[FREE_T.ofs()]      = Quad::type_t(ZERO);
 
         /*
          * Random-Access Memory (RAM) image (read/write + GC)
          */
-        let mut quad_ram = [
-            Quad::empty_t();
-            QUAD_RAM_MAX
-        ];
-        quad_ram[MEMORY.ofs()]      = Quad::memory_t(Any::ram(RAM_TOP_OFS), NIL, ZERO, NIL);
-        quad_ram[DDEQUE.ofs()]      = Quad::ddeque_t(NIL, NIL, NIL, NIL);  // no events, no continuations
-        quad_ram[DEBUG_DEV.ofs()]   = Quad::actor_t(ZERO, NIL, UNDEF);    // debug device #0
-        quad_ram[CLOCK_DEV.ofs()]   = Quad::actor_t(PLUS_1, NIL, UNDEF);  // clock device #1
-        quad_ram[IO_DEV.ofs()]      = Quad::actor_t(PLUS_2, NIL, UNDEF);  // i/o device #2
-        quad_ram[BLOB_DEV.ofs()]    = Quad::actor_t(PLUS_3, NIL, UNDEF);  // blob device #3
-        quad_ram[TIMER_DEV.ofs()]   = Quad::actor_t(PLUS_4, NIL, UNDEF);  // timer device #4
-        quad_ram[MEMO_DEV.ofs()]    = Quad::actor_t(PLUS_5, NIL, UNDEF);  // memo device #5
-        quad_ram[HOST_DEV.ofs()]    = Quad::actor_t(PLUS_6, NIL, UNDEF);  // host device #6
-        quad_ram[RANDOM_DEV.ofs()]  = Quad::actor_t(PLUS_7, NIL, UNDEF);  // random device #7
-        quad_ram[SPONSOR.ofs()]     = Quad::sponsor_t(
-                                    Any::fix(4096),
-                                    Any::fix(256),
-                                    Any::fix(8192),
-                                    UNDEF);  // root configuration sponsor
-
-pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
-
-        let mut gc_queue = [ UNDEF; QUAD_RAM_MAX ];
-        let mut ofs = 0;
-        while ofs < RAM_BASE_OFS {
-            gc_queue[ofs] = GC_BLACK;  // mark "black" (reachable)
-            ofs += 1;
-        }
-        gc_queue[GC_FIRST] = NIL;
-        gc_queue[GC_LAST] = NIL;
+        self.quad_ram[MEMORY.ofs()]      = Quad::memory_t(Any::ram(RAM_BASE_OFS), NIL, ZERO, NIL);
+        self.quad_ram[DDEQUE.ofs()]      = Quad::ddeque_t(NIL, NIL, NIL, NIL);  // no events, no continuations
+        self.quad_ram[DEBUG_DEV.ofs()]   = Quad::actor_t(ZERO, NIL, UNDEF);    // debug device #0
+        self.quad_ram[CLOCK_DEV.ofs()]   = Quad::actor_t(PLUS_1, NIL, UNDEF);  // clock device #1
+        self.quad_ram[IO_DEV.ofs()]      = Quad::actor_t(PLUS_2, NIL, UNDEF);  // i/o device #2
+        self.quad_ram[BLOB_DEV.ofs()]    = Quad::actor_t(PLUS_3, NIL, UNDEF);  // blob device #3
+        self.quad_ram[TIMER_DEV.ofs()]   = Quad::actor_t(PLUS_4, NIL, UNDEF);  // timer device #4
+        self.quad_ram[NULL_DEV.ofs()]    = Quad::actor_t(PLUS_5, NIL, UNDEF);  // null device #5
+        self.quad_ram[HOST_DEV.ofs()]    = Quad::actor_t(PLUS_6, NIL, UNDEF);  // host device #6
+        self.quad_ram[RANDOM_DEV.ofs()]  = Quad::actor_t(PLUS_7, NIL, UNDEF);  // random device #7
+        self.quad_ram[RSVD_A_DEV.ofs()]  = Quad::actor_t(Any::fix(8), NIL, UNDEF);  // --reserved-- device #8
+        self.quad_ram[RSVD_B_DEV.ofs()]  = Quad::actor_t(Any::fix(9), NIL, UNDEF);  // --reserved-- device #9
+        self.quad_ram[RSVD_C_DEV.ofs()]  = Quad::actor_t(Any::fix(10), NIL, UNDEF);  // --reserved-- device #10
+        self.quad_ram[RSVD_D_DEV.ofs()]  = Quad::actor_t(Any::fix(11), NIL, UNDEF);  // --reserved-- device #11
+        self.quad_ram[RSVD_E_DEV.ofs()]  = Quad::actor_t(Any::fix(12), NIL, UNDEF);  // --reserved-- device #12
+        self.quad_ram[SPONSOR.ofs()]     = Quad::sponsor_t(
+                                        Any::fix(4096),
+                                        Any::fix(256),
+                                        Any::fix(8192),
+                                        UNDEF);  // root configuration sponsor
 
         /*
-         * OED-encoded Blob Memory (64kB maximum)
+         * Garbage-Collector Metadata
          */
-        let mut blob_ram = [
-            0x8F as u8;  // fill with OED-encoded `null` octets
-            BLOB_RAM_MAX
-        ];
-        let mut nat = BLOB_RAM_MAX;
-        nat -= 9;
-        blob_ram[0] = 0x88;             // Array
-        blob_ram[1] = 0x82;             //   length: +Integer elements
-        blob_ram[2] = 16;               //     length.size = 16 bits
-        blob_ram[3] = 1;                //     length[0] = 1 (lsb)
-        blob_ram[4] = 0;                //     length[1] = 0 (msb)
-        blob_ram[5] = 0x82;             //   size: +Integer octets
-        blob_ram[6] = 16;               //     size.size = 16 bits
-        blob_ram[7] = u16_lsb(nat);     //     size[0] (lsb)
-        blob_ram[8] = u16_msb(nat);     //     size[1] (msb)
-        nat -= 9;
-        blob_ram[9] = 0x8B;             //   [0] = Extension Blob
-        blob_ram[10] = 0x82;            //       meta: +Integer offset
-        blob_ram[11] = 16;              //         meta.size = 16 bits
-        blob_ram[12] = 0;               //         meta[0] = 0 (lsb)
-        blob_ram[13] = 0;               //         meta[1] = 0 (msb)
-        blob_ram[14] = 0x82;            //       size: +Integer octets
-        blob_ram[15] = 16;              //         size.size = 16 bits
-        blob_ram[16] = u16_lsb(nat);    //         size[0] (lsb)
-        blob_ram[17] = u16_msb(nat);    //         size[1] (msb)
+        let mut ofs = 0;
+        while ofs < RAM_BASE_OFS {
+            self.gc_queue[ofs] = GC_BLACK;  // mark "black" (reachable)
+            ofs += 1;
+        }
+        self.gc_queue[GC_FIRST] = NIL;
+        self.gc_queue[GC_LAST] = NIL;
+    }
 
-        let CoreDevices { debug_device, clock_device, random_device, io_device, blob_device, timer_device, host_device } = core_devices;
-
-        Core {
-            quad_rom,
-            quad_ram,
-            gc_queue,
-            blob_ram,
-            device: [
-                Some(Box::new(debug_device)),
-                Some(Box::new(clock_device)),
-                Some(Box::new(io_device)),
-                Some(Box::new(blob_device)),
-                Some(Box::new(timer_device)),
-                Some(Box::new(NullDevice::new())),
-                Some(Box::new(host_device)),
-                Some(Box::new(random_device)),
-            ],
-            rom_top: Any::rom(ROM_TOP_OFS),
-            gc_state: UNDEF,
-            trace_event: Box::new(|_, _| {}),
+    pub fn install_device(&mut self, cap: Any, mut dev: Box<dyn Device>) {
+        if let Ok(id) = self.device_id(cap) {
+            dev.init();
+            self.device[id] = Some(dev);
         }
     }
 
-    pub fn set_trace_event<F: Fn(Any, Any) + 'static>(&mut self, trace_event: F) {
-        self.trace_event = Box::new(trace_event);
+    #[cfg(debug_assertions)]
+    fn call_trace_event(&self, ep: Any, kp: Any) {
+        if let Some(trace) = &self.trace_fn {
+            (trace)(ep, kp);
+        }
+    }
+    pub fn set_trace_event<F: Fn(Any, Any) + 'static>(&mut self, trace_handler: F) {
+        self.trace_fn = Some(Box::new(trace_handler));
     }
 
     /*
@@ -303,12 +262,14 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
         let target = self.event_target(ep);
         if let Ok(id) = self.device_id(target) {
             // synchronous message-event to device
-            let mut dev_mut = self.device[id].take().unwrap();
-            let result = dev_mut.handle_event(self, ep);
-            self.device[id] = Some(dev_mut);
-            #[cfg(debug_assertions)]
-            (self.trace_event)(ep, UNDEF);  // trace transactional effect(s)
-            result
+            if self.device[id].is_some() {  // ignore unavailable devices
+                let mut dev_mut = self.device[id].take().unwrap();
+                let result = dev_mut.handle_event(self, ep);
+                self.device[id] = Some(dev_mut);
+                #[cfg(debug_assertions)]
+                self.call_trace_event(ep, UNDEF);  // trace transactional effect(s)
+                return result
+            }
         } else {
             // begin actor-event transaction
             let ptr = self.cap_to_ptr(target);
@@ -318,8 +279,8 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
             let effect = self.reserve(&actor)?;  // event-effect accumulator
             self.ram_mut(ptr).set_z(effect);  // indicate actor is busy
             self.cont_enqueue(kp);
-            Ok(())
         }
+        Ok(())
     }
     fn execute_instruction(&mut self) -> Any {
         let kp = self.kp();
@@ -749,7 +710,7 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
             },
             VM_END => {
                 #[cfg(debug_assertions)]
-                (self.trace_event)(self.ep(), self.kp());  // trace transactional effect(s)
+                self.call_trace_event(self.ep(), self.kp());  // trace transactional effect(s)
                 let me = self.self_ptr();
                 let rv = match imm {
                     END_ABORT => {
@@ -1349,7 +1310,6 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
     fn ram_root(&self) -> Any { self.ram(self.memory()).z() }
     fn set_ram_root(&mut self, ptr: Any) { self.ram_mut(self.memory()).set_z(ptr); }
     pub fn memory(&self) -> Any { MEMORY }
-    pub fn blob_top(&self) -> Any { Any::fix(BLOB_RAM_MAX as isize) }
 
     fn new_sponsor(&mut self) -> Result<Any, Error> {
         let spn = Quad::sponsor_t(ZERO, ZERO, ZERO, ZERO);
@@ -1391,13 +1351,11 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
             let t = self.stack_pop();
             self.set_cdr(p, t);
             self.stack_push(lst)?;
-        } else if n == 0 {
-            self.stack_push(NIL)?;
         } else if n == -1 {
             // capture entire stack
             let sp = self.cons(self.sp(), NIL)?;
             self.set_sp(sp);
-        } else {
+        } else if n != 0 {
             self.stack_push(UNDEF)?;
         }
         Ok(())
@@ -1677,6 +1635,7 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
         Ok(ptr)
     }
     pub fn reserve(&mut self, init: &Quad) -> Result<Any, Error> {
+        assert_ne!(self.ram_top(), UNDEF);  // WARNING! MUST CALL `init()` FIRST!
         let next = self.ram_next();
         let ptr = if self.typeq(FREE_T, next) {
             // use quad from free-list
@@ -2039,15 +1998,6 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
     pub fn ram_buffer(&self) -> &[Quad] {
         &self.quad_ram
     }
-    pub fn blob_buffer(&self) -> &[u8] {
-        &self.blob_ram
-    }
-    pub fn blob_read(&self, ofs: usize) -> u8 {
-        self.blob_ram[ofs]
-    }
-    pub fn blob_write(&mut self, ofs: usize, data: u8) {
-        self.blob_ram[ofs] = data;
-    }
 
     fn bitsr(&self, n: isize, nn: isize, carry: bool, rotate: bool) -> Any {
         // fixnum bitwise shift/rotate utility
@@ -2076,20 +2026,14 @@ pub const RAM_TOP_OFS: usize = RAM_BASE_OFS;
     }
 }
 
-fn u16_lsb(nat: usize) -> u8 {
-    (nat & 0xFF) as u8
-}
-
-fn u16_msb(nat: usize) -> u8 {
-    ((nat >> 8) & 0xFF) as u8
-}
-
 fn falsy(v: Any) -> bool {
     v == FALSE || v == UNDEF || v == NIL || v == ZERO
 }
 
 #[cfg(test)]
 mod tests {
+    use blob_dev::BlobDevice;
+
     use super::*;
 
     fn load_std(core: &mut Core) -> Any {
@@ -2101,7 +2045,7 @@ pub const SINK_BEH: Any = Any { raw: (STD_OFS+0) as Raw };  // alias for no-op b
 pub const COMMIT: Any = Any { raw: (STD_OFS+0) as Raw };
         quad_rom[COMMIT.ofs()]      = Quad::vm_end_commit();
 pub const SEND_MSG: Any = Any { raw: (STD_OFS+1) as Raw };
-        quad_rom[SEND_MSG.ofs()]      = Quad::vm_send(MINUS_1, COMMIT);
+        quad_rom[SEND_MSG.ofs()]      = Quad::vm_actor_send(COMMIT);
 pub const CUST_SEND: Any = Any { raw: (STD_OFS+2) as Raw };
         quad_rom[CUST_SEND.ofs()]   = Quad::vm_msg(PLUS_1, SEND_MSG);
 pub const RV_SELF: Any = Any { raw: (STD_OFS+3) as Raw };
@@ -2132,11 +2076,21 @@ pub const ABORT: Any = Any { raw: (STD_OFS+13) as Raw };
     }
 
     /*
-    (define fib                 ; O(n!) performance?
-        (lambda (n)             ; msg: (cust n)
-            (if (< n 2)
-                n
-                (+ (fib (- n 1)) (fib (- n 2))) )))
+    # O(n!) performance?
+    DEF fib_beh(m) AS \(cust, n).[
+        CASE greater(n, m) OF
+        TRUE : [
+            SEND (k_fib, sub(n, 1)) TO SELF
+            SEND (k_fib, sub(n, 2)) TO SELF
+            CREATE k_fib WITH \a.[
+                BECOME \b.[
+                    SEND add(a, b) TO cust
+                ]
+            ]
+        ]
+        _ : [ SEND n TO cust ]
+        END
+    ]
     */
     fn load_fib_test(core: &mut Core) -> Any {
         // prepare ROM with fib(6) => 8 test case
@@ -2146,13 +2100,13 @@ pub const LIB_OFS: usize = ROM_BASE_OFS;
 pub const COMMIT: Any = Any { raw: (LIB_OFS+0) as Raw };
         quad_rom[COMMIT.ofs()]      = Quad::vm_end_commit();
 pub const SEND_MSG: Any = Any { raw: (LIB_OFS+1) as Raw };
-        quad_rom[SEND_MSG.ofs()]    = Quad::vm_send(MINUS_1, COMMIT);
+        quad_rom[SEND_MSG.ofs()]    = Quad::vm_actor_send(COMMIT);
 pub const CUST_SEND: Any = Any { raw: (LIB_OFS+2) as Raw };
         quad_rom[CUST_SEND.ofs()]   = Quad::vm_msg(PLUS_1, SEND_MSG);
 
 pub const F_FIB_OFS: usize = LIB_OFS+3;
 pub const F_FIB_BEH: Any = Any { raw: F_FIB_OFS as Raw };
-        quad_rom[F_FIB_OFS+0]       = Quad::vm_msg(PLUS_2, Any::rom(F_FIB_OFS+1));  // n
+        quad_rom[F_FIB_OFS+0]       = Quad::vm_msg(MINUS_1, Any::rom(F_FIB_OFS+1));  // n
         quad_rom[F_FIB_OFS+1]       = Quad::vm_dup(PLUS_1, Any::rom(F_FIB_OFS+2));  // n n
         quad_rom[F_FIB_OFS+2]       = Quad::vm_push(PLUS_2, Any::rom(F_FIB_OFS+3));  // n n 2
         quad_rom[F_FIB_OFS+3]       = Quad::vm_cmp_lt(Any::rom(F_FIB_OFS+4));  // n n<2
@@ -2160,52 +2114,58 @@ pub const F_FIB_BEH: Any = Any { raw: F_FIB_OFS as Raw };
 
         quad_rom[F_FIB_OFS+5]       = Quad::vm_msg(PLUS_1, Any::rom(F_FIB_OFS+6));  // n cust
         quad_rom[F_FIB_OFS+6]       = Quad::vm_push(F_FIB_K, Any::rom(F_FIB_OFS+7));  // n cust fib-k
-        quad_rom[F_FIB_OFS+7]       = Quad::vm_new(MINUS_1, Any::rom(F_FIB_OFS+8));  // n k=fib-k.cust
+        quad_rom[F_FIB_OFS+7]       = Quad::vm_actor_create(Any::rom(F_FIB_OFS+8));  // n k=fib-k.cust
 
         quad_rom[F_FIB_OFS+8]       = Quad::vm_pick(PLUS_2, Any::rom(F_FIB_OFS+9));  // n k n
         quad_rom[F_FIB_OFS+9]       = Quad::vm_push(PLUS_1, Any::rom(F_FIB_OFS+10));  // n k n 1
         quad_rom[F_FIB_OFS+10]      = Quad::vm_alu_sub(Any::rom(F_FIB_OFS+11));  // n k n-1
         quad_rom[F_FIB_OFS+11]      = Quad::vm_pick(PLUS_2, Any::rom(F_FIB_OFS+12));  // n k n-1 k
-        quad_rom[F_FIB_OFS+12]      = Quad::vm_push(F_FIB_BEH, Any::rom(F_FIB_OFS+13));  // n k n-1 k fib-beh
-        quad_rom[F_FIB_OFS+13]      = Quad::vm_new(ZERO, Any::rom(F_FIB_OFS+14));  // n k n-1 k fib.()
-        quad_rom[F_FIB_OFS+14]      = Quad::vm_send(PLUS_2, Any::rom(F_FIB_OFS+15));  // n k
+        quad_rom[F_FIB_OFS+12]      = Quad::vm_pair(PLUS_1, Any::rom(F_FIB_OFS+13));  // n k (k . n-1)
+        quad_rom[F_FIB_OFS+13]      = Quad::vm_push(UNDEF, Any::rom(F_FIB_OFS+14));  // n k (k . n-1) #?
+        quad_rom[F_FIB_OFS+14]      = Quad::vm_push(F_FIB_BEH, Any::rom(F_FIB_OFS+15));  // n k (k . n-1) #? fib-beh
+        quad_rom[F_FIB_OFS+15]      = Quad::vm_actor_create(Any::rom(F_FIB_OFS+16));  // n k (k . n-1) fib.#?
+        quad_rom[F_FIB_OFS+16]      = Quad::vm_actor_send(Any::rom(F_FIB_OFS+17));  // n k
 
-        quad_rom[F_FIB_OFS+15]      = Quad::vm_roll(PLUS_2, Any::rom(F_FIB_OFS+16));  // k n
-        quad_rom[F_FIB_OFS+16]      = Quad::vm_push(PLUS_2, Any::rom(F_FIB_OFS+17));  // k n 2
-        quad_rom[F_FIB_OFS+17]      = Quad::vm_alu_sub(Any::rom(F_FIB_OFS+18));  // k n-2
-        quad_rom[F_FIB_OFS+18]      = Quad::vm_roll(PLUS_2, Any::rom(F_FIB_OFS+19));  // n-2 k
-        quad_rom[F_FIB_OFS+19]      = Quad::vm_push(F_FIB_BEH, Any::rom(F_FIB_OFS+20));  // n-2 k fib-beh
-        quad_rom[F_FIB_OFS+20]      = Quad::vm_new(ZERO, Any::rom(F_FIB_OFS+21));  // n-2 k fib.()
-        quad_rom[F_FIB_OFS+21]      = Quad::vm_send(PLUS_2, COMMIT);  // --
+        quad_rom[F_FIB_OFS+17]      = Quad::vm_roll(PLUS_2, Any::rom(F_FIB_OFS+18));  // k n
+        quad_rom[F_FIB_OFS+18]      = Quad::vm_push(PLUS_2, Any::rom(F_FIB_OFS+19));  // k n 2
+        quad_rom[F_FIB_OFS+19]      = Quad::vm_alu_sub(Any::rom(F_FIB_OFS+20));  // k n-2
+        quad_rom[F_FIB_OFS+20]      = Quad::vm_roll(PLUS_2, Any::rom(F_FIB_OFS+21));  // n-2 k
+        quad_rom[F_FIB_OFS+21]      = Quad::vm_pair(PLUS_1, Any::rom(F_FIB_OFS+22));  // (k . n-2)
+        quad_rom[F_FIB_OFS+22]      = Quad::vm_push(UNDEF, Any::rom(F_FIB_OFS+23));  // (k . n-2) #?
+        quad_rom[F_FIB_OFS+23]      = Quad::vm_push(F_FIB_BEH, Any::rom(F_FIB_OFS+24));  // (k . n-2) #? fib-beh
+        quad_rom[F_FIB_OFS+24]      = Quad::vm_actor_create(SEND_MSG);  // (k . n-2) fib.#?
 
-pub const F_FIB_K: Any = Any { raw: (F_FIB_OFS+22) as Raw };
+pub const F_FIB_K: Any = Any { raw: (F_FIB_OFS+25) as Raw };
         // state: cust
-        quad_rom[F_FIB_OFS+22]      = Quad::vm_msg(ZERO, Any::rom(F_FIB_OFS+23));  // m
-        quad_rom[F_FIB_OFS+23]      = Quad::vm_state(ZERO, Any::rom(F_FIB_OFS+24));  // m cust
-        quad_rom[F_FIB_OFS+24]      = Quad::vm_push(F_FIB_K2, Any::rom(F_FIB_OFS+25));  // m cust fib-k2
-        quad_rom[F_FIB_OFS+25]      = Quad::vm_beh(PLUS_2, COMMIT);  // fib-k2.(cust m)
+        quad_rom[F_FIB_OFS+25]      = Quad::vm_msg(ZERO, Any::rom(F_FIB_OFS+26));  // m
+        quad_rom[F_FIB_OFS+26]      = Quad::vm_state(ZERO, Any::rom(F_FIB_OFS+27));  // m cust
+        quad_rom[F_FIB_OFS+27]      = Quad::vm_pair(PLUS_1, Any::rom(F_FIB_OFS+28));  // (cust . m)
+        quad_rom[F_FIB_OFS+28]      = Quad::vm_push(F_FIB_K2, Any::rom(F_FIB_OFS+29));  // (cust . m) fib-k2
+        quad_rom[F_FIB_OFS+29]      = Quad::vm_actor_become(COMMIT);  // fib-k2.(cust . m)
 
-pub const F_FIB_K2: Any = Any { raw: (F_FIB_OFS+26) as Raw };
-        // state: (cust m)
-        quad_rom[F_FIB_OFS+26]      = Quad::vm_state(PLUS_2, Any::rom(F_FIB_OFS+27));  // m
-        quad_rom[F_FIB_OFS+27]      = Quad::vm_msg(ZERO, Any::rom(F_FIB_OFS+28));  // m n
-        quad_rom[F_FIB_OFS+28]      = Quad::vm_alu_add(Any::rom(F_FIB_OFS+29));  // m+n
-        quad_rom[F_FIB_OFS+29]      = Quad::vm_state(PLUS_1, SEND_MSG);  // m+n cust
+pub const F_FIB_K2: Any = Any { raw: (F_FIB_OFS+30) as Raw };
+        // state: (cust . m)
+        quad_rom[F_FIB_OFS+30]      = Quad::vm_state(MINUS_1, Any::rom(F_FIB_OFS+31));  // m
+        quad_rom[F_FIB_OFS+31]      = Quad::vm_msg(ZERO, Any::rom(F_FIB_OFS+32));  // m n
+        quad_rom[F_FIB_OFS+32]      = Quad::vm_alu_add(Any::rom(F_FIB_OFS+33));  // m+n
+        quad_rom[F_FIB_OFS+33]      = Quad::vm_state(PLUS_1, SEND_MSG);  // m+n cust
 
-pub const TEST_OFS: usize = F_FIB_OFS+30;
+pub const TEST_OFS: usize = F_FIB_OFS+34;
 pub const TEST_BEH: Any    = Any { raw: TEST_OFS as Raw };
         quad_rom[TEST_OFS+0]        = Quad::vm_push(PLUS_6, Any::rom(TEST_OFS+1));  // 6
-        quad_rom[TEST_OFS+1]        = Quad::vm_push(EQ_8_BEH, Any::rom(TEST_OFS+2));  // 6 eq-8-beh
-        quad_rom[TEST_OFS+2]        = Quad::vm_new(ZERO, Any::rom(TEST_OFS+3));  // 6 cust=eq-8.()
-        quad_rom[TEST_OFS+3]        = Quad::vm_push(F_FIB_BEH, Any::rom(TEST_OFS+4));  // 6 cust fib-beh
-        quad_rom[TEST_OFS+4]        = Quad::vm_new(ZERO, Any::rom(TEST_OFS+5));  // 6 cust fib.()
-        quad_rom[TEST_OFS+5]        = Quad::vm_send(PLUS_2, COMMIT);  // --
+        quad_rom[TEST_OFS+1]        = Quad::vm_push(UNDEF, Any::rom(TEST_OFS+2));  // 6 #?
+        quad_rom[TEST_OFS+2]        = Quad::vm_push(EQ_8_BEH, Any::rom(TEST_OFS+3));  // 6 #? eq-8-beh
+        quad_rom[TEST_OFS+3]        = Quad::vm_actor_create(Any::rom(TEST_OFS+4));  // 6 cust=eq-8.#?
+        quad_rom[TEST_OFS+4]        = Quad::vm_pair(PLUS_1, Any::rom(TEST_OFS+5));  // (cust . 6)
+        quad_rom[TEST_OFS+5]        = Quad::vm_push(UNDEF, Any::rom(TEST_OFS+6));  // (cust . 6) #?
+        quad_rom[TEST_OFS+6]        = Quad::vm_push(F_FIB_BEH, Any::rom(TEST_OFS+7));  // (cust . 6) #? fib-beh
+        quad_rom[TEST_OFS+7]        = Quad::vm_actor_create(SEND_MSG);  // (cust . 6) fib.#?
 
-pub const EQ_8_BEH: Any = Any { raw: (TEST_OFS+6) as Raw };
-        quad_rom[TEST_OFS+6]        = Quad::vm_msg(ZERO, Any::rom(TEST_OFS+7));  // msg
-        quad_rom[TEST_OFS+7]        = Quad::vm_assert(PLUS_8, COMMIT);  // assert_eq(8, msg)
+pub const EQ_8_BEH: Any = Any { raw: (TEST_OFS+8) as Raw };
+        quad_rom[TEST_OFS+8]        = Quad::vm_msg(ZERO, Any::rom(TEST_OFS+9));  // msg
+        quad_rom[TEST_OFS+9]        = Quad::vm_assert(Any::fix(8), COMMIT);  // assert_eq(8, msg)
 
-        core.rom_top = Any::rom(TEST_OFS+8);
+        core.rom_top = Any::rom(TEST_OFS+10);
         TEST_BEH
     }
 
@@ -2365,7 +2325,7 @@ pub const LIB_OFS: usize = ROM_BASE_OFS;
 pub const COMMIT: Any = Any { raw: (LIB_OFS+0) as Raw };
         quad_rom[COMMIT.ofs()]      = Quad::vm_end_commit();
 pub const SEND_MSG: Any = Any { raw: (LIB_OFS+1) as Raw };
-        quad_rom[SEND_MSG.ofs()]    = Quad::vm_send(MINUS_1, COMMIT);
+        quad_rom[SEND_MSG.ofs()]    = Quad::vm_actor_send(COMMIT);
 pub const CUST_SEND: Any = Any { raw: (LIB_OFS+2) as Raw };
         quad_rom[CUST_SEND.ofs()]   = Quad::vm_msg(PLUS_1, SEND_MSG);
 
@@ -2373,43 +2333,42 @@ pub const T_DEV_OFS: usize = LIB_OFS+3;
 pub const T_DEV_BEH: Any = Any { raw: T_DEV_OFS as Raw };
         quad_rom[T_DEV_OFS+0]       = Quad::vm_push(PLUS_7, Any::rom(T_DEV_OFS+1));  // 7
         quad_rom[T_DEV_OFS+1]       = Quad::vm_push(COUNT_TO, Any::rom(T_DEV_OFS+2));  // 7 count_to
-        quad_rom[T_DEV_OFS+2]       = Quad::vm_beh(PLUS_1, Any::rom(T_DEV_OFS+3));  // --
+        quad_rom[T_DEV_OFS+2]       = Quad::vm_actor_become(Any::rom(T_DEV_OFS+3));  // --
         quad_rom[T_DEV_OFS+3]       = Quad::vm_push(PLUS_5, Any::rom(T_DEV_OFS+4));  // 5
         quad_rom[T_DEV_OFS+4]       = Quad::vm_my(MY_SELF, Any::rom(T_DEV_OFS+5));  // 5 SELF
-        quad_rom[T_DEV_OFS+5]       = Quad::vm_send(PLUS_1, Any::rom(T_DEV_OFS+6));  // --
+        quad_rom[T_DEV_OFS+5]       = Quad::vm_actor_send(Any::rom(T_DEV_OFS+6));  // --
 
         quad_rom[T_DEV_OFS+6]       = Quad::vm_push(Any::fix(13), Any::rom(T_DEV_OFS+7));  // 13
-        quad_rom[T_DEV_OFS+7]       = Quad::vm_push(BLOB_IO_BEH, Any::rom(T_DEV_OFS+8));  // 13 BLOB_IO_BEH
-        quad_rom[T_DEV_OFS+8]       = Quad::vm_new(ZERO, Any::rom(T_DEV_OFS+9));  // 13 BLOB_IO.()
-        quad_rom[T_DEV_OFS+9]       = Quad::vm_pair(PLUS_1, Any::rom(T_DEV_OFS+10));  // (BLOB_IO . 13)
-        quad_rom[T_DEV_OFS+10]       = Quad::vm_push(BLOB_DEV, Any::rom(T_DEV_OFS+11));  // (BLOB_IO . 13) BLOB_DEV
-        quad_rom[T_DEV_OFS+11]      = Quad::vm_send(MINUS_1, Any::rom(T_DEV_OFS+12));  // --
-
-        quad_rom[T_DEV_OFS+12]      = Quad::vm_push(Any::fix(3), Any::rom(T_DEV_OFS+13));  // 3
-        quad_rom[T_DEV_OFS+13]      = Quad::vm_push(DEBUG_DEV, Any::rom(T_DEV_OFS+14));  // 3 DEBUG_DEV
-        quad_rom[T_DEV_OFS+14]      = Quad::vm_pair(PLUS_1, Any::rom(T_DEV_OFS+15));  // (DEBUG_DEV . 3)
-        quad_rom[T_DEV_OFS+15]      = Quad::vm_push(BLOB_DEV, Any::rom(T_DEV_OFS+16));  // (DEBUG_DEV . 3) BLOB_DEV
-        quad_rom[T_DEV_OFS+16]      = Quad::vm_send(MINUS_1, COMMIT);  // --
+        quad_rom[T_DEV_OFS+7]       = Quad::vm_push(UNDEF, Any::rom(T_DEV_OFS+8));  // 13 #?
+        quad_rom[T_DEV_OFS+8]       = Quad::vm_push(BLOB_IO_BEH, Any::rom(T_DEV_OFS+9));  // 13 #? BLOB_IO_BEH
+        quad_rom[T_DEV_OFS+9]       = Quad::vm_actor_create(Any::rom(T_DEV_OFS+10));  // 13 BLOB_IO.#?
+        quad_rom[T_DEV_OFS+10]      = Quad::vm_pair(PLUS_1, Any::rom(T_DEV_OFS+11));  // (BLOB_IO . 13)
+        quad_rom[T_DEV_OFS+11]      = Quad::vm_push(BLOB_DEV, Any::rom(T_DEV_OFS+12));  // (BLOB_IO . 13) BLOB_DEV
+        quad_rom[T_DEV_OFS+12]      = Quad::vm_actor_send(Any::rom(T_DEV_OFS+13));  // --
+        quad_rom[T_DEV_OFS+13]      = Quad::vm_push(Any::fix(3), Any::rom(T_DEV_OFS+14));  // 3
+        quad_rom[T_DEV_OFS+14]      = Quad::vm_push(DEBUG_DEV, Any::rom(T_DEV_OFS+15));  // 3 DEBUG_DEV
+        quad_rom[T_DEV_OFS+15]      = Quad::vm_pair(PLUS_1, Any::rom(T_DEV_OFS+16));  // (DEBUG_DEV . 3)
+        quad_rom[T_DEV_OFS+16]      = Quad::vm_push(BLOB_DEV, SEND_MSG);  // (DEBUG_DEV . 3) BLOB_DEV
 
 pub const BLOB_IO_OFS: usize = T_DEV_OFS+17;
 pub const BLOB_IO_BEH: Any = Any { raw: BLOB_IO_OFS as Raw };
-        // () <- blob
+        // _ <- blob
         quad_rom[BLOB_IO_OFS+0]     = Quad::vm_msg(ZERO, Any::rom(BLOB_IO_OFS+1));  // blob
         quad_rom[BLOB_IO_OFS+1]     = Quad::vm_push(DEBUG_DEV, SEND_MSG);  // blob DEBUG_DEV
 
 pub const COUNT_TO_OFS: usize = BLOB_IO_OFS+2;
 pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
-        // (m) <- (n)
-        quad_rom[COUNT_TO_OFS+0]    = Quad::vm_msg(PLUS_1, Any::rom(COUNT_TO_OFS+1));  // n
-        quad_rom[COUNT_TO_OFS+1]    = Quad::vm_state(PLUS_1, Any::rom(COUNT_TO_OFS+2));  // n m
+        // m <- n
+        quad_rom[COUNT_TO_OFS+0]    = Quad::vm_msg(ZERO, Any::rom(COUNT_TO_OFS+1));  // n
+        quad_rom[COUNT_TO_OFS+1]    = Quad::vm_state(ZERO, Any::rom(COUNT_TO_OFS+2));  // n m
         quad_rom[COUNT_TO_OFS+2]    = Quad::vm_cmp_lt(Any::rom(COUNT_TO_OFS+3));  // n<m
         quad_rom[COUNT_TO_OFS+3]    = Quad::vm_if(Any::rom(COUNT_TO_OFS+4), COMMIT);  // --
 
-        quad_rom[COUNT_TO_OFS+4]    = Quad::vm_msg(PLUS_1, Any::rom(COUNT_TO_OFS+5));  // n
+        quad_rom[COUNT_TO_OFS+4]    = Quad::vm_msg(ZERO, Any::rom(COUNT_TO_OFS+5));  // n
         quad_rom[COUNT_TO_OFS+5]    = Quad::vm_push(PLUS_1, Any::rom(COUNT_TO_OFS+6));  // n 1
         quad_rom[COUNT_TO_OFS+6]    = Quad::vm_alu_add(Any::rom(COUNT_TO_OFS+7));  // n+1
         quad_rom[COUNT_TO_OFS+7]    = Quad::vm_my(MY_SELF, Any::rom(COUNT_TO_OFS+8));  // n+1 SELF
-        quad_rom[COUNT_TO_OFS+8]    = Quad::vm_send(PLUS_1, Any::rom(COUNT_TO_OFS+9));  // --
+        quad_rom[COUNT_TO_OFS+8]    = Quad::vm_actor_send(Any::rom(COUNT_TO_OFS+9));  // --
         quad_rom[COUNT_TO_OFS+9]    = Quad::vm_dup(ZERO, COMMIT);  // --
 
         core.rom_top = Any::rom(COUNT_TO_OFS+10);
@@ -2427,17 +2386,30 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
 
     #[test]
     fn core_initialization() {
-        let core = Core::default();
+        let mut core = Core::default();
+        core.init();
         assert_eq!(ZERO, core.ram_free());
         assert_eq!(NIL, core.ram_next());
         assert_eq!(NIL, core.e_first());
         assert_eq!(NIL, core.k_first());
         assert_eq!(UNDEF, core.kp());
+        /*
+        static mut CORE: Core = Core::default();
+        unsafe {
+            CORE.init();
+            assert_eq!(ZERO, CORE.ram_free());
+            assert_eq!(NIL, CORE.ram_next());
+            assert_eq!(NIL, CORE.e_first());
+            assert_eq!(NIL, CORE.k_first());
+            assert_eq!(UNDEF, CORE.kp());
+        }
+        */
     }
 
     #[test]
     fn basic_memory_allocation() {
         let mut core = Core::default();
+        core.init();
         let top_before = core.ram_top().ofs();
         let m1 = core.reserve(&Quad::pair_t(PLUS_1, PLUS_1)).unwrap();
         assert!(m1.is_ptr());
@@ -2454,6 +2426,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn run_loop_terminates() {
         let mut core = Core::default();
+        core.init();
         let boot_beh = load_std(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2466,6 +2439,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn gc_before_and_after_run() {
         let mut core = Core::default();
+        core.init();
         let boot_beh = load_fib_test(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2479,6 +2453,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn dict_operations() {
         let mut core = Core::default();
+        core.init();
         let boot_beh = load_dict_test(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2491,6 +2466,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn deque_operations() {
         let mut core = Core::default();
+        core.init();
         let boot_beh = load_deque_test(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2505,6 +2481,9 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn device_operations() {
         let mut core = Core::default();
+        core.init();
+        core.install_device(BLOB_DEV, Box::new(BlobDevice::new()));
+//        core.install_device(BLOB_DEV, Box::new(FailDevice::new()));
         let boot_beh = load_device_test(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2520,6 +2499,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
         const OUT_OF_MSG: Any = Any { raw: DIR_RAW | E_MSG_LIM as u32 };
         const OUT_OF_CPU: Any = Any { raw: DIR_RAW | E_CPU_LIM as u32 };
         let mut core = Core::default();
+        core.init();
         let boot_beh = load_fib_test(&mut core);
         let boot_ptr = core.reserve(&Quad::new_actor(boot_beh, NIL)).unwrap();
         let a_boot = core.ptr_to_cap(boot_ptr);
@@ -2527,15 +2507,15 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
         core.event_enqueue(evt.unwrap());
         core.set_sponsor_memory(SPONSOR, PLUS_3);
         core.set_sponsor_events(SPONSOR, PLUS_1);
-        core.set_sponsor_cycles(SPONSOR, PLUS_8);
+        core.set_sponsor_cycles(SPONSOR, Any::fix(8));
         let sig = core.run_loop(256);
         assert_eq!(OUT_OF_MEM, sig);
-        core.set_sponsor_memory(SPONSOR, PLUS_8);
+        core.set_sponsor_memory(SPONSOR, Any::fix(8));
         core.set_sponsor_cycles(SPONSOR, PLUS_2);
         let sig = core.run_loop(256);
         assert_eq!(OUT_OF_CPU, sig);
-        core.set_sponsor_memory(SPONSOR, PLUS_8);
-        core.set_sponsor_cycles(SPONSOR, PLUS_8);
+        core.set_sponsor_memory(SPONSOR, Any::fix(8));
+        core.set_sponsor_cycles(SPONSOR, Any::fix(8));
         let sig = core.run_loop(256);
         assert_eq!(OUT_OF_MSG, sig);
     }
@@ -2543,6 +2523,7 @@ pub const COUNT_TO: Any = Any { raw: COUNT_TO_OFS as Raw };
     #[test]
     fn gc_queue_management() {
         let mut core = Core::default();
+        core.init();
         assert_eq!(NIL, core.gc_queue[GC_FIRST]);
         assert_eq!(NIL, core.gc_queue[GC_LAST]);
         let mut item;

@@ -7,14 +7,17 @@ loop:
     drop 0 loop             ; no-op loop
 
 boot:
-    msg 0                   ; {caps}
-    push std.resend         ; {caps} std.resend
-    new 0                   ; {caps} a_resend
-    send 0                  ; --
-    push loop               ; loop
-    new 0                   ; a_loop
-    send 0                  ; --
-    ref std.commit
+    push #?                 ; #?
+    msg 0                   ; #? {caps}
+    push #?                 ; #? {caps} #?
+    push std.resend         ; #? {caps} #? std.resend
+    actor create            ; #? {caps} a_resend
+    actor send              ; --
+    push #?                 ; #?
+    push #?                 ; #? #?
+    push loop               ; #? #? loop
+    actor create            ; #? a_loop
+    ref std.send_msg
 
 .export
     boot

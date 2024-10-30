@@ -46,12 +46,12 @@ The following assembly program would extract `proxy` from the boot caps dict and
 send it the message `42`.
 
 ```
-boot:                   ; () <- {caps}
+boot:                   ; _ <- {caps}
     push 42             ; 42
     msg 0               ; 42 {caps}
     push 1234           ; 42 {caps} 1234
     dict get            ; 42 proxy
-    send -1             ; --
+    actor send          ; --
     end commit
 .export
     boot

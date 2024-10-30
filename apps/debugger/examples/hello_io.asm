@@ -26,10 +26,10 @@ str_out:                    ; (cb out . str) <- result
     push #?                 ; rest out cb code callback to_cancel=#?
     pair 2                  ; rest out cb req=(to_cancel callback . code)
     state 2                 ; rest out cb req out
-    send -1                 ; rest out cb
+    actor send              ; rest out cb
     pair 2                  ; (cb out . rest)
     push str_out            ; (cb out . str=rest) str_out
-    beh -1                  ; --
+    actor become            ; --
     ref std.commit
 
 str_end:                    ; --
@@ -37,18 +37,19 @@ str_end:                    ; --
     state 1                 ; result cb
     ref std.send_msg
 
-boot:                       ; () <- {caps}
-    push hello              ; str
-    msg 0                   ; str {caps}
-    push dev.io_key         ; str {caps} dev.io_key
-    dict get                ; str io_dev
-    push std.sink_beh       ; str io_dev sink_beh
-    new 0                   ; str out=io_dev cb=sink_beh.()
-    pair 2                  ; (cb out . str)
-    push str_out            ; (cb out . str) str_out
-    new -1                  ; str_out.(cb out . str)
-    send 0                  ; --
-    ref std.commit
+boot:                       ; _ <- {caps}
+    push #?                 ; #?
+    push hello              ; #? str
+    msg 0                   ; #? str {caps}
+    push dev.io_key         ; #? str {caps} dev.io_key
+    dict get                ; #? str io_dev
+    push #?                 ; #? str io_dev #?
+    push std.sink_beh       ; #? str io_dev #? sink_beh
+    actor create            ; #? str out=io_dev cb=sink_beh.#?
+    pair 2                  ; #? (cb out . str)
+    push str_out            ; #? (cb out . str) str_out
+    actor create            ; #? str_out.(cb out . str)
+    ref std.send_msg
 
 .export
     boot

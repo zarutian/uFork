@@ -1,5 +1,6 @@
 ; Some hand-assembled Scheme that uses the jump instruction to model function
-; calls, rather than using message sends.
+; calls, rather than using message sends. This strategy was used to implement
+; the Humus compiler, humus.js.
 
 .import
     dev: "https://ufork.org/lib/dev.asm"
@@ -193,7 +194,7 @@ hof3:
 
 ; Test suite
 
-boot:                       ; () <- {caps}
+boot:                       ; _ <- {caps}
 
 ; Call the 'double_sum' closure and print its return value.
 

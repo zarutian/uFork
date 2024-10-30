@@ -20,43 +20,12 @@ closure_t:                  ; [closure_t, code, data]
 behavior_t:                 ; [behavior_t, code, data, meta]
     type_t 3                ; [#type_t, 3]
 
-empty_env:                  ; (sp=#nil . env=#nil)
+empty_env:                  ; (sp=() . env=())
     pair_t #nil #nil        ; (())
 
 ;
-; Polyfill procedures for Actor primitives
+; Meta-actor creation and behavior replacement.
 ;
-
-new_2:                      ; ( (beh . state) -- beh.state )
-    roll -2                 ; k (beh . state)
-    quad -3                 ; k state beh type
-    drop 1                  ; k state beh
-create_return:              ; k state beh
-    new -1                  ; k beh.state
-    roll 2                  ; beh.state k
-    return                  ; beh.state
-
-new_3:                      ; ( [_, _, _, beh] -- beh.[_, _, _, beh] )
-    roll -2                 ; k state=[_, _, _, beh]
-    dup 1                   ; k state [_, _, _, beh]
-    quad -4                 ; k state beh _ _ _
-    drop 3                  ; k state beh
-    ref create_return
-
-beh_2:                      ; ( (beh . state) -- )
-    roll -2                 ; k (beh . state)
-    quad -3                 ; k state beh type
-    drop 1                  ; k state beh
-    beh -1                  ; k
-    return                  ; --
-
-beh_3:                      ; ( [_, _, _, beh] -- )
-    roll -2                 ; k state=[_, _, _, beh]
-    dup 1                   ; k state [_, _, _, beh]
-    quad -4                 ; k state beh _ _ _
-    drop 3                  ; k state beh
-    beh -1                  ; k
-    return                  ; --
 
 act_2:                      ; ( (beh . state) -- state beh )
     roll -2                 ; k (beh . state)
@@ -73,6 +42,31 @@ act_3:                      ; ( [_, _, _, beh] -- state beh )
     roll 3                  ; state beh k
     return                  ; state beh
 
+new_2:                      ; ( (beh . state) -- beh.state )
+    roll -2                 ; k (beh . state)
+    call act_2              ; k state beh
+new_return:                 ; k state beh
+    actor create            ; k beh.state
+    roll 2                  ; beh.state k
+    return                  ; beh.state
+
+new_3:                      ; ( [_, _, _, beh] -- beh.[_, _, _, beh] )
+    roll -2                 ; k state=[_, _, _, beh]
+    call act_3              ; k state beh
+    ref new_return
+
+beh_2:                      ; ( (beh . state) -- )
+    roll -2                 ; k (beh . state)
+    call act_2              ; k state beh
+beh_return:
+    actor become            ; k
+    return                  ; --
+
+beh_3:                      ; ( [_, _, _, beh] -- )
+    roll -2                 ; k state=[_, _, _, beh]
+    call act_3              ; k state beh
+    ref beh_return
+
 ;
 ; Continuations for non-tail function calls
 ;
@@ -84,13 +78,15 @@ act_3:                      ; ( [_, _, _, beh] -- state beh )
 ;    ...
 
 ; Prepare args for function call
-;    push 3              ; arg3
-;    push 2              ; arg3 arg2
-;    push 1              ; arg3 arg2 arg1
-;    my self             ; args... cust=SELF
-;    push func           ; args... cust closure
-;    new -2              ; args... cust code.data
-;    send 4              ; -- nargs+1
+;    push #nil           ; ()
+;    push 3              ; () arg3
+;    push 2              ; () arg3 arg2
+;    push 1              ; () arg3 arg2 arg1
+;    my self             ; () arg3 arg2 arg1 cust=SELF
+;    pair nargs+1        ; args=(cust arg1 arg2 arg3)
+;    push func           ; args closure
+;    call new_2          ; args code.data
+;    actor send          ; --
 
 ; Prefix to create/become continuation
 ;    pair -1             ; sp'=(...)
@@ -99,7 +95,7 @@ act_3:                      ; ( [_, _, _, beh] -- state beh )
 ;    msg 0               ; sp' env cont msg
 ;    pair 3              ; (msg cont env . sp')
 ;    push continuation   ; (msg cont env . sp') continuation
-;    beh -1              ; -- SELF=continuation.(msg cont env . sp')
+;    actor become        ; -- SELF=continuation.(msg cont env . sp')
 ;    ref scm.commit
 
 continuation:               ; (msg cont env . sp) <- rv
@@ -109,7 +105,7 @@ continuation:               ; (msg cont env . sp) <- rv
     pair 1                  ; env sp'=(rv . sp)
     pair 1                  ; (sp' . env)
     state 2                 ; (sp' . env) cont
-    beh -1                  ; -- SELF=cont.(sp' . env)
+    actor become            ; -- SELF=cont.(sp' . env)
     state 1                 ; msg
     my self                 ; msg SELF
     ref std.send_msg
@@ -129,7 +125,7 @@ imm_actor:                  ; beh <- msg
     my self                 ; msg SELF
     pair 1                  ; (SELF . msg)
     state 0                 ; (SELF . msg) beh=[behavior_t, code, data, meta]
-    new -2                  ; (SELF . msg) code.data
+    call new_2              ; (SELF . msg) code.data
     ref std.send_msg
 
 mut_actor:                  ; beh <- msg
@@ -142,12 +138,12 @@ txn_actor:                  ; beh pending msg
     my self                 ; beh pending msg SELF
     pair 1                  ; beh pending (SELF . msg)
     pick 3                  ; beh pending (SELF . msg) beh
-    new -2                  ; beh pending (SELF . msg) txn=code.data
+    call new_2              ; beh pending (SELF . msg) txn=code.data
     pick -3                 ; beh txn pending (SELF . msg) txn
-    send -1                 ; beh txn pending
+    actor send              ; beh txn pending
     pair 2                  ; (pending txn . beh)
     push bsy_actor          ; (pending txn . beh) bsy_actor
-    beh -1                  ; -- SELF=bsy_actor.(pending txn . beh)
+    actor become            ; -- SELF=bsy_actor.(pending txn . beh)
     ref std.commit
 
 bsy_actor:                  ; (pending txn . beh) <- (txn? . beh') | msg
@@ -163,7 +159,7 @@ bsy_actor:                  ; (pending txn . beh) <- (txn? . beh') | msg
     deque put               ; (txn . beh) pending'
     pair 1                  ; (pending' txn . beh)
     push bsy_actor          ; (pending' txn . beh) bsy_actor
-    beh -1                  ; -- SELF=bsy_actor.(pending' txn . beh)
+    actor become            ; -- SELF=bsy_actor.(pending' txn . beh)
     ref std.commit
 
 cmt_actor:                  ; --
@@ -197,12 +193,12 @@ nxt_actor:                  ; beh'
 
 rdy_actor:                  ; beh'
     ; no more deferred, become ready
-    beh -3                  ; -- SELF=get_Z(beh').beh'
+    call beh_3              ; -- SELF=get_Z(beh').beh'
     ref std.commit
 
 rst_actor:                  ; beh'
     ; reset entry-point (e.g.: transition to `imm_actor`)
-    beh -3                  ; -- SELF=get_Z(beh').beh'
+    call beh_3              ; -- SELF=get_Z(beh').beh'
     state 1                 ; pending
 
 rst_msgs:                   ; pending
@@ -211,7 +207,7 @@ rst_msgs:                   ; pending
     if std.commit           ; pending
     deque pop               ; pending' msg'
     my self                 ; pending' msg' SELF
-    send -1                 ; pending'
+    actor send              ; pending'
     ref rst_msgs
 
 ;
@@ -233,7 +229,7 @@ count_data:
 count_code:                 ; (_ n) <- (self cust)
     state 2                 ; n
     msg 2                   ; n cust
-    send -1                 ; --
+    actor send              ; --
     push #nil               ; ()
     state 2                 ; () n
     push 1                  ; () n 1
@@ -261,7 +257,7 @@ assert:                     ; expect <- actual
 ; Boot code runs when the module is loaded (but not when imported).
 ;
 
-boot:                       ; () <- {caps}
+boot:                       ; _ <- {caps}
     msg 0                   ; {caps}
     push dev.debug_key      ; {caps} debug_key
     dict get                ; referee=debug
@@ -277,19 +273,23 @@ test:                       ; judge <- {caps}
     state 0                 ; () 2nd 1st probation timer judge
     pair 5                  ; (judge timer probation 1st 2nd)
     push referee.beh        ; (judge timer probation 1st 2nd) referee_beh
-    new -1                  ; referee=referee_beh.(judge timer probation 1st 2nd)
+    actor create            ; referee=referee_beh.(judge timer probation 1st 2nd)
 act:
     push #nil               ; referee ()
     roll 2                  ; () referee
     pair 1                  ; (referee)
     push count_0            ; (referee) beh=count_0
-    new -3                  ; (referee) counter=get_Z(beh).beh
+    call new_3              ; (referee) counter=get_Z(beh).beh
     dup 2                   ; (referee) counter (referee) counter
-    send -1                 ; (referee) counter
-    send -1                 ; --
+    actor send              ; (referee) counter
+    actor send              ; --
     ref std.commit
 
 .export
+    beh_2
+    beh_3
+    new_2
+    new_3
     symbol_t
     closure_t
     behavior_t
