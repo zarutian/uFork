@@ -10,6 +10,7 @@ import hex from "https://ufork.org/lib/hex.js";
 //import hexdump from "https://ufork.org/lib/hexdump.js";
 //import OED from "https://ufork.org/lib/oed.js";
 //import oed from "https://ufork.org/lib/oed_lite.js";
+const ucode_href = import.meta.resolve("./ucode.f");
 
 function $(el) {
     if (typeof el === "string") {
@@ -161,8 +162,8 @@ function format_memory(mem, base = 0, annotation = no_annotation) {
 }
 
 // display annotated memory image
-function display_memory(prog, words) {
-    const memh = ucode.print_memh(prog, words);
+function display_memory(prog, words, current_address) {
+    const memh = ucode.print_memh(prog, words, current_address);
     $program_mem.value = memh;
 }
 
@@ -200,7 +201,7 @@ function schedule_display(state, prog, words) {
     // Schedules exactly one redraw for the upcoming paint.
     cancelAnimationFrame(schedule_timer_id);
     schedule_timer_id = requestAnimationFrame(function () {
-        display_memory(prog, words);
+        display_memory(prog, words, state.pc);
         display_machine(state, prog, words);
     });
 }
@@ -256,17 +257,18 @@ $program_compile.onclick = function () {
         $machine_play.textContent = "Play";
         $machine_step.disabled = false;
     }
+    let state = machine.copy();
     function step() {
         const delay = Number($machine_delay.value);
         const begin = Date.now();
         while (true) {
             const result = machine.step();
             if (result !== undefined) {
+                schedule_display(state, prog, words);
                 halt(result);
-                break;
+                return;
             }
-            const state = machine.copy();
-            schedule_display(state, prog, words);
+            state = machine.copy();
             const breakpoint = Number("0x" + $machine_break.value);
             if (Number.isSafeInteger(breakpoint) && (breakpoint === state.pc)) {
                 pause();
@@ -283,6 +285,7 @@ $program_compile.onclick = function () {
                 break;
             }
         }
+        schedule_display(state, prog, words);
     }
     function play() {
         $machine_play.textContent = "Pause";
@@ -302,3 +305,11 @@ $program_compile.onclick = function () {
         }
     };
 };
+
+fetch(ucode_href).then(function (response) {
+    if (response.ok) {
+        response.text().then(function (text) {
+            $program_src.textContent = text;
+        });
+    }
+});

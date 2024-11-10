@@ -96,14 +96,17 @@
 //      For realtime info on the browser's WebRTC connections, navigate to
 //      chrome://webrtc-internals in Google Chrome.
 
-/*jslint browser */
+/*jslint browser, global */
 
 import hex from "https://ufork.org/lib/hex.js";
 import parseq from "https://ufork.org/lib/parseq.js";
+import lazy from "https://ufork.org/lib/rq/lazy.js";
 import requestorize from "https://ufork.org/lib/rq/requestorize.js";
 import unpromise from "https://ufork.org/lib/rq/unpromise.js";
 import thru from "https://ufork.org/lib/rq/thru.js";
 import merge from "https://ufork.org/lib/rq/merge.js";
+import signaller from "./dummy_signaller.js";
+// import signaller from "./websockets_signaller.js";
 
 const ice_servers = [{
     urls: [
@@ -141,7 +144,7 @@ function identity_to_name(identity) {
 
 function generate_certificate() {
     return unpromise(function () {
-        return window.RTCPeerConnection.generateCertificate({
+        return RTCPeerConnection.generateCertificate({
             name: "ECDSA",
             namedCurve: "P-256",
             expires: 31536000000 // one year is the maximum
@@ -157,9 +160,7 @@ function get_fingerprints() {
 
     return parseq.sequence([
         unpromise(function (certificate) {
-            const peer = new window.RTCPeerConnection(
-                {certificates: [certificate]}
-            );
+            const peer = new RTCPeerConnection({certificates: [certificate]});
             peer.createDataChannel("");
             return peer.createOffer();
         }),
@@ -284,7 +285,7 @@ function webrtc_transport(signaller, log) {
             }
 
             try {
-                peer = new window.RTCPeerConnection({
+                peer = new RTCPeerConnection({
                     certificates: [identity.certificate],
                     iceServers: ice_servers
                 });
@@ -423,7 +424,7 @@ function webrtc_transport(signaller, log) {
 
 // Make a new RTCPeerConnection object that expects a single data channel.
 
-                    peer = new window.RTCPeerConnection({
+                    peer = new RTCPeerConnection({
                         certificates: [identity.certificate],
                         iceServers: ice_servers
                     });
@@ -570,84 +571,85 @@ function webrtc_transport(signaller, log) {
     });
 }
 
-//debug import lazy from "https://ufork.org/lib/rq/lazy.js";
-//debug import signaller from "./dummy_signaller.js";
-//debug // import signaller from "./websockets_signaller.js";
-//debug function halve(buffer) {
-//debug     return new Uint8Array(buffer).slice(
-//debug         0,
-//debug         Math.floor(buffer.length / 2)
-//debug     );
-//debug }
-//debug const bind_info = {
-//debug     origin: "ws://localhost:4455",
-//debug     password: "uFork"
-//debug };
-//debug const address = "ws://localhost:4455";
-//debug const transport = webrtc_transport(signaller(), console.log);
-//debug const flake = 0;
-//debug const cancel = parseq.sequence([
-//debug     parseq.parallel_object({
-//debug         alice_identity: generate_identity(),
-//debug         bob_identity: generate_identity()
-//debug     }),
-//debug     merge({
-//debug         bob_stop: lazy(function ({bob_identity}) {
-//debug             return transport.listen(
-//debug                 bob_identity,
-//debug                 bind_info,
-//debug                 function on_open(connection) {
-//debug                     console.log(
-//debug                         "bob on_open",
-//debug                         hex.encode(connection.name())
-//debug                     );
-//debug                 },
-//debug                 function on_receive(connection, frame_buffer) {
-//debug                     console.log("bob on_receive", frame_buffer.length);
-//debug                     if (frame_buffer.length > 0) {
-//debug                         connection.send(halve(frame_buffer));
-//debug                     } else {
-//debug                         connection.close();
-//debug                     }
-//debug                 },
-//debug                 function on_close(_, reason) {
-//debug                     console.log("bob on_close", reason);
-//debug                 }
-//debug             );
-//debug         })
-//debug     }),
-//debug     lazy(function ({alice_identity, bob_identity, bob_stop}) {
-//debug         console.log("bob listening");
-//debug         return transport.connect(
-//debug             alice_identity,
-//debug             identity_to_name(bob_identity),
-//debug             address,
-//debug             function on_receive(connection, frame_buffer) {
-//debug                 console.log("alice on_receive", frame_buffer.length);
-//debug                 if (frame_buffer.length > 0) {
-//debug                     connection.send(halve(frame_buffer));
-//debug                 } else {
-//debug                     connection.close();
-//debug                 }
-//debug                 if (Math.random() < flake) {
-//debug                     console.log("bob stop");
-//debug                     bob_stop();
-//debug                 }
-//debug             },
-//debug             function on_close(_, reason) {
-//debug                 console.log("alice on_close", reason);
-//debug             }
-//debug         );
-//debug     }),
-//debug     requestorize(function (connection) {
-//debug         console.log("alice on_open", hex.encode(connection.name()));
-//debug         connection.send(connection.name());
-//debug         return true;
-//debug     })
-//debug ])(console.log);
-//debug if (Math.random() < flake) {
-//debug     console.log("cancel");
-//debug     cancel();
-//debug }
+function halve(buffer) {
+    return new Uint8Array(buffer).slice(
+        0,
+        Math.floor(buffer.length / 2)
+    );
+}
+
+function demo(log) {
+    const bind_info = {
+        origin: "ws://localhost:4455",
+        password: "uFork"
+    };
+    const address = "ws://localhost:4455";
+    const transport = webrtc_transport(signaller(), log);
+    const flake = 0;
+    const cancel = parseq.sequence([
+        parseq.parallel_object({
+            alice_identity: generate_identity(),
+            bob_identity: generate_identity()
+        }),
+        merge({
+            bob_stop: lazy(function ({bob_identity}) {
+                return transport.listen(
+                    bob_identity,
+                    bind_info,
+                    function on_open(connection) {
+                        log("bob on_open", hex.encode(connection.name()));
+                    },
+                    function on_receive(connection, frame_buffer) {
+                        log("bob on_receive", frame_buffer.length);
+                        if (frame_buffer.length > 0) {
+                            connection.send(halve(frame_buffer));
+                        } else {
+                            connection.close();
+                        }
+                    },
+                    function on_close(_, reason) {
+                        log("bob on_close", reason);
+                    }
+                );
+            })
+        }),
+        lazy(function ({alice_identity, bob_identity, bob_stop}) {
+            log("bob listening");
+            return transport.connect(
+                alice_identity,
+                identity_to_name(bob_identity),
+                address,
+                function on_receive(connection, frame_buffer) {
+                    log("alice on_receive", frame_buffer.length);
+                    if (frame_buffer.length > 0) {
+                        connection.send(halve(frame_buffer));
+                    } else {
+                        connection.close();
+                    }
+                    if (Math.random() < flake) {
+                        log("bob stop");
+                        bob_stop();
+                    }
+                },
+                function on_close(_, reason) {
+                    log("alice on_close", reason);
+                }
+            );
+        }),
+        requestorize(function (connection) {
+            log("alice on_open", hex.encode(connection.name()));
+            connection.send(connection.name());
+            return true;
+        })
+    ])(log);
+    if (Math.random() < flake) {
+        log("cancel");
+        cancel();
+    }
+}
+
+if (import.meta.main) {
+    demo(globalThis.console.log);
+}
 
 export default Object.freeze(webrtc_transport);

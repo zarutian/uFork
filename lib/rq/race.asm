@@ -143,7 +143,7 @@ start_one:
     push 1                  ; running' quota=1
     push start_tag          ; running' quota start_tag
     pair 1                  ; running' (start_tag . quota)
-    my self                 ; running' (start_tag . quota) SELF
+    actor self              ; running' (start_tag . quota) SELF
     actor send              ; running'
     ref become
 finish:
@@ -184,7 +184,7 @@ pop:
     actor create            ; ... requestor canceller=canceller_beh.#?
     state -3                ; ... requestor canceller value
     pick 2                  ; ... requestor canceller value label=canceller
-    my self                 ; ... requestor canceller value label rcvr=SELF
+    actor self              ; ... requestor canceller value label rcvr=SELF
     pair 1                  ; ... requestor canceller value (rcvr . label)
     push lib.label_beh      ; ... requestor canceller value (rcvr . label) label_beh
     actor create            ; ... requestor canceller value callback=label_beh.(rcvr . label)
@@ -198,7 +198,7 @@ pop:
     roll 3                  ; running queue' canceller quota'
     push start_tag          ; running queue' canceller quota' start_tag
     pair 1                  ; running queue' canceller (start_tag . quota')
-    my self                 ; running queue' canceller (start_tag . quota') SELF
+    actor self              ; running queue' canceller (start_tag . quota') SELF
     actor send              ; running queue' canceller
 
 ; Mark the requestor as running.
@@ -256,6 +256,13 @@ test:                       ; judge <- {caps}
     actor create            ; referee=referee_beh.(judge timer probation 1st 2nd 3rd 4th)
     push unwrap_result.beh  ; referee unwrap_result_beh
     actor create            ; referee'=unwrap_result_beh.referee
+    ; msg 0                   ; referee' {caps}
+    ; push dev.debug_key      ; referee' {caps} debug_key
+    ; dict get                ; referee' debug
+    ; pair 1                  ; (debug . referee')
+    ; push lib.tee_beh        ; (debug . referee') tee_beh
+    ; actor create            ; referee''
+
 suite:
     msg 0                   ; referee {caps}
     push dev.timer_key      ; referee {caps} timer_key
@@ -336,7 +343,7 @@ suite:
 
     dup 2                   ; ... referee timer
     push 1                  ; ... referee timer throttle=1
-    push 50                 ; ... referee timer throttle cancel_at=50ms
+    push #?                 ; ... referee timer throttle cancel_at=#?
     push #nil               ; ... ... ()
     push 30                 ; ... ... 1st_delay=30ms
     push 666                ; ... ... 1st_error=666

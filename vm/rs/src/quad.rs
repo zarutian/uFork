@@ -12,7 +12,7 @@ pub struct Quad {
 }
 
 impl Quad {
-    pub const fn new(t: Any, x: Any, y: Any, z: Any) -> Quad {
+    pub const fn new(t: Any, x: Any, y: Any, z: Any) -> Self {
         Quad { t, x, y, z }
     }
     pub fn t(&self) -> Any { self.t }
@@ -24,16 +24,17 @@ impl Quad {
     pub fn set_y(&mut self, v: Any) { self.y = v; }
     pub fn set_z(&mut self, v: Any) { self.z = v; }
 
-    // construct basic Quad types
-    pub const fn empty_t() -> Quad {
+    pub const fn empty_t() -> Self {
         Self::new(UNDEF, UNDEF, UNDEF, UNDEF)
     }
-    pub const fn literal_t() -> Quad {
+    pub const fn literal_t() -> Self {
         Self::new(LITERAL_T, UNDEF, UNDEF, UNDEF)
     }
-    pub const fn type_t(n: Any) -> Quad {
+    pub const fn type_t(n: Any) -> Self {
         Self::new(TYPE_T, n, UNDEF, UNDEF)
     }
+
+    // construct basic Quad types
     pub fn event_t(sponsor: Any, target: Any, msg: Any, next: Any) -> Quad {
         assert!(sponsor.is_ram());
         assert!(target.is_cap());
@@ -194,35 +195,10 @@ impl Quad {
         assert!(k.is_ptr());
         Self::instr_t(VM_STATE, n, k)
     }
-    pub fn vm_my(op: Any, k: Any) -> Quad {
-        assert!(op.is_fix());
-        assert!(k.is_ptr());
-        Self::instr_t(VM_MY, op, k)
-    }
     pub fn vm_actor(op: Any, k: Any) -> Quad {
         assert!(op.is_fix());
         assert!(k.is_ptr());
         Self::instr_t(VM_ACTOR, op, k)
-    }
-    pub fn vm_send(n: Any, k: Any) -> Quad {
-        assert!(n.is_fix());
-        assert!(k.is_ptr());
-        Self::instr_t(VM_SEND, n, k)
-    }
-    pub fn vm_new(n: Any, k: Any) -> Quad {
-        assert!(n.is_fix());
-        assert!(k.is_ptr());
-        Self::instr_t(VM_NEW, n, k)
-    }
-    pub fn vm_beh(n: Any, k: Any) -> Quad {
-        assert!(n.is_fix());
-        assert!(k.is_ptr());
-        Self::instr_t(VM_BEH, n, k)
-    }
-    pub fn vm_signal(n: Any, k: Any) -> Quad {
-        assert!(n.is_fix());
-        assert!(k.is_ptr());
-        Self::instr_t(VM_SIGNAL, n, k)
     }
     pub fn vm_end(op: Any) -> Quad {
         assert!(op.is_fix());
@@ -346,20 +322,6 @@ impl Quad {
         Self::vm_cmp(CMP_NE, k)
     }
 
-    // construct VM_MY instructions
-    pub fn vm_my_self(k: Any) -> Quad {
-        assert!(k.is_ptr());
-        Self::vm_my(MY_SELF, k)
-    }
-    pub fn vm_my_beh(k: Any) -> Quad {
-        assert!(k.is_ptr());
-        Self::vm_my(MY_BEH, k)
-    }
-    pub fn vm_my_state(k: Any) -> Quad {
-        assert!(k.is_ptr());
-        Self::vm_my(MY_STATE, k)
-    }
-
     // construct VM_ACTOR instructions
     pub fn vm_actor_send(k: Any) -> Quad {
         assert!(k.is_ptr());
@@ -376,6 +338,10 @@ impl Quad {
     pub fn vm_actor_become(k: Any) -> Quad {
         assert!(k.is_ptr());
         Self::instr_t(VM_ACTOR, ACTOR_BECOME, k)
+    }
+    pub fn vm_actor_self(k: Any) -> Quad {
+        assert!(k.is_ptr());
+        Self::instr_t(VM_ACTOR, ACTOR_SELF, k)
     }
 
     // construct VM_END instructions

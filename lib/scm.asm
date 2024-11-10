@@ -68,6 +68,46 @@ beh_3:                      ; ( [_, _, _, beh] -- )
     ref beh_return
 
 ;
+; Stack gathering and spreading.
+;
+
+stack_bottom:               ; ×
+    pair_t #? #?
+
+gather:                     ; ( × vₙ … v₁ -- sp )
+    push #nil               ; × vₙ … v₂ v₁ k sp=()
+    roll -2                 ; × vₙ … v₂ v₁ sp k
+gather_loop:
+    roll 3                  ; × vₙ … v₂ sp k v₁
+    dup 1                   ; × vₙ … v₂ sp k v₁ v₁
+    push stack_bottom       ; × vₙ … v₂ sp k v₁ v₁ ×
+    cmp eq                  ; × vₙ … v₂ sp k v₁ v₁==×
+    if gather_done          ; × vₙ … v₂ sp k v₁
+    roll 3                  ; × vₙ … v₂ k v₁ sp
+    roll 2                  ; × vₙ … v₂ k sp v₁
+    pair 1                  ; × vₙ … v₂ k sp'=(v₁ . sp)
+    roll -2                 ; × vₙ … v₂ sp' k
+    ref gather_loop
+gather_done:                ; sp k v₁
+    drop 1                  ; sp k
+    return
+
+spread:                     ; ( sp -- × vₙ … v₁ )
+    roll -2                 ; k sp
+    push stack_bottom       ; k sp ×
+    roll -3                 ; × k sp
+spread_loop:                ; × vₙ … vₘ k sp
+    dup 1                   ; × vₙ … vₘ k sp sp
+    typeq #pair_t           ; × vₙ … vₘ k sp is_pair(sp)
+    if_not spread_done      ; × vₙ … vₘ k sp=(vₘ₋₁ . sp')
+    part 1                  ; × vₙ … vₘ k sp' vₘ₋₁
+    roll -3                 ; × vₙ … vₘ vₘ₋₁ k sp'
+    ref spread_loop
+spread_done:                ; × vₙ … v₁ k ()
+    drop 1                  ; × vₙ … v₁ k
+    return
+
+;
 ; Continuations for non-tail function calls
 ;
 
@@ -82,14 +122,14 @@ beh_3:                      ; ( [_, _, _, beh] -- )
 ;    push 3              ; () arg3
 ;    push 2              ; () arg3 arg2
 ;    push 1              ; () arg3 arg2 arg1
-;    my self             ; () arg3 arg2 arg1 cust=SELF
+;    actor self          ; () arg3 arg2 arg1 cust=SELF
 ;    pair nargs+1        ; args=(cust arg1 arg2 arg3)
 ;    push func           ; args closure
 ;    call new_2          ; args code.data
 ;    actor send          ; --
 
 ; Prefix to create/become continuation
-;    pair -1             ; sp'=(...)
+;    call gather         ; sp'=(...)
 ;    state -1            ; sp' env
 ;    push cont           ; sp' env cont
 ;    msg 0               ; sp' env cont msg
@@ -101,19 +141,20 @@ beh_3:                      ; ( [_, _, _, beh] -- )
 continuation:               ; (msg cont env . sp) <- rv
     state 3                 ; env
     state -3                ; env sp
-    msg 0                   ; env sp rv
-    pair 1                  ; env sp'=(rv . sp)
+    call spread             ; env × vₙ … v₁
+    msg 0                   ; env × vₙ … v₁ rv
+    call gather             ; env sp'
     pair 1                  ; (sp' . env)
     state 2                 ; (sp' . env) cont
     actor become            ; -- SELF=cont.(sp' . env)
     state 1                 ; msg
-    my self                 ; msg SELF
+    actor self              ; msg SELF
     ref std.send_msg
 
 ; Suffix to restore stack and continue
 ;cont:                   ; (sp . env) <- (cust . args)
 ;    state 1             ; sp=(...)
-;    part -1             ; ...
+;    call spread         ; × ...
 ;    ref <k>
 
 ;
@@ -122,7 +163,7 @@ continuation:               ; (msg cont env . sp) <- rv
 
 imm_actor:                  ; beh <- msg
     msg 0                   ; msg
-    my self                 ; msg SELF
+    actor self              ; msg SELF
     pair 1                  ; (SELF . msg)
     state 0                 ; (SELF . msg) beh=[behavior_t, code, data, meta]
     call new_2              ; (SELF . msg) code.data
@@ -135,7 +176,7 @@ mut_actor:                  ; beh <- msg
 
 txn_actor:                  ; beh pending msg
     ; begin transaction
-    my self                 ; beh pending msg SELF
+    actor self              ; beh pending msg SELF
     pair 1                  ; beh pending (SELF . msg)
     pick 3                  ; beh pending (SELF . msg) beh
     call new_2              ; beh pending (SELF . msg) txn=code.data
@@ -206,7 +247,7 @@ rst_msgs:                   ; pending
     deque empty             ; is_empty(pending)
     if std.commit           ; pending
     deque pop               ; pending' msg'
-    my self                 ; pending' msg' SELF
+    actor self              ; pending' msg' SELF
     actor send              ; pending'
     ref rst_msgs
 
@@ -241,7 +282,7 @@ count_code:                 ; (_ n) <- (self cust)
     roll -3                 ; meta data code
     push behavior_t         ; meta data code behavior_t
     quad 4                  ; beh'=[behavior_t, code, data, meta]
-    my self                 ; beh' txn=SELF
+    actor self              ; beh' txn=SELF
     pair 1                  ; (txn . beh')
     msg 1                   ; (txn . beh') self
     ref std.send_msg
@@ -253,9 +294,7 @@ assert:                     ; expect <- actual
     assert #t               ; assert(expect==actual)
     ref std.commit
 
-;
-; Boot code runs when the module is loaded (but not when imported).
-;
+; Test suite
 
 boot:                       ; _ <- {caps}
     msg 0                   ; {caps}
@@ -283,6 +322,18 @@ act:
     dup 2                   ; (referee) counter (referee) counter
     actor send              ; (referee) counter
     actor send              ; --
+
+    push stack_bottom       ; ×
+    push 1                  ; × 1
+    push 2                  ; × 1 2
+    push 3                  ; × 1 2 3
+    call gather             ; sp=(1 2 3)
+    call spread             ; × 1 2 3
+    assert 3                ; × 1 2
+    assert 2                ; × 1
+    assert 1                ; ×
+    assert stack_bottom     ; --
+    assert #?               ; --!  // stack empty
     ref std.commit
 
 .export
@@ -294,6 +345,9 @@ act:
     closure_t
     behavior_t
     empty_env
+    stack_bottom
+    gather
+    spread
     continuation
     imm_actor
     mut_actor

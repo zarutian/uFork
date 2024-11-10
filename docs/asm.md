@@ -211,9 +211,7 @@ _k_                  | `jump`              | —            | continue at _k_
 —                    | `call` _proc_ [_k_] | _k_          | push return address _k_ and jump to _proc_
 _k_                  | `return`            | —            | return to _k_
 … _tail_ _head_      | `pair` _n_          | _pair_       | create _pair_ from _head_ and _tail_ (_n_ times)
-_vₙ_ … _v₁_          | `pair` -1           | (_v₁_ … _vₙ_) | capture stack items as a single _pair_ list
 _pair_               | `part` _n_          | … _tail_ _head_ | split _pair_ into _head_ and _tail_ (_n_ times)
-(_v₁_ … _vₙ_)        | `part` -1           | _vₙ_ … _v₁_   | spread _pair_ list items onto stack
 (_v₁_ … _vₙ_ . _tailₙ_) | `nth` _n_         | _vₙ_         | copy item _n_ from a _pair_ list
 (_v₁_ … _vₙ_ . _tailₙ_) | `nth` -_n_        | _tailₙ_      | copy tail _n_ from a _pair_ list
 _dict_ _key_         | `dict` `has`        | _bool_       | `#t` if _dict_ has a binding for _key_, otherwise `#f`
@@ -242,25 +240,11 @@ _quad_               | `quad` `-4`         | _Z_ _Y_ _X_ _T_ | extract 4 _quad_ 
 —                    | `state` `0`         | _state_      | copy _actor_ state to stack
 —                    | `state` _n_         | _stateₙ_     | copy state item _n_ to stack
 —                    | `state` -_n_        | _tailₙ_      | copy state tail _n_ to stack
-—                    | `my` `self`         | _actor_      | push _actor_ address on stack
-—                    | `my` `beh`          | _beh_        | push _actor_ behavior on stack
-—                    | `my` `state`        | _vₙ_ … _v₁_  | spread _actor_ state onto stack
 _msg_ _actor_        | `actor` `send`      | —            | send _msg_ to _actor_
 _spn_ _msg_ _actor_  | `actor` `post`      | —            | send _msg_ to _actor_ using sponsor _spn_
 _state_ _beh_        | `actor` `create`    | _actor_      | create an _actor_ with code _beh_ and data _state_
 _state_ _beh_        | `actor` `become`    | —            | replace code with _beh_ and data with _state_
-_mₙ_ … _m₁_ _actor_  | `send` _n_          | —            | send (_m₁_ … _mₙ_) to _actor_
-_msg_ _actor_        | `send` `-1`         | —            | send _msg_ to _actor_
-_sponsor_ _mₙ_ … _m₁_ _actor_ | `signal` _n_ | —          | send (_m₁_ … _mₙ_) to _actor_ using _sponsor_
-_sponsor_ _msg_ _actor_ | `signal` `-1`    | —            | send _msg_ to _actor_ using _sponsor_
-_vₙ_ … _v₁_ _beh_    | `new` _n_           | _actor_      | create an _actor_ with code _beh_ and data (_v₁_ … _vₙ_)
-_state_ _beh_        | `new` `-1`          | _actor_      | create an _actor_ with code _beh_ and data _state_
-(_beh_ . _state_)    | `new` `-2`          | _actor_      | create an _actor_ with code _beh_ and data _state_
-\[_, _, _, _beh_\]   | `new` `-3`          | _actor_      | create an _actor_ with code _beh_ and data \[_, _, _, _beh_\]
-_vₙ_ … _v₁_ _beh_    | `beh` _n_           | —            | replace code with _beh_ and data with (_v₁_ … _vₙ_)
-_state_ _beh_        | `beh` `-1`          | —            | replace code with _beh_ and data with _state_
-(_beh_ . _state_)    | `beh` `-2`          | —            | replace code with _beh_ and data with _state_
-\[_, _, _, _beh_\]   | `beh` `-3`          | —            | replace code with _beh_ and data with \[_, _, _, _beh_\]
+—                    | `actor` `self`      | _actor_      | push _actor_ address on stack
 _reason_             | `end` `abort`       | —            | abort actor transaction with _reason_
 —                    | `end` `stop`        | —            | stop current continuation (thread)
 —                    | `end` `commit`      | —            | commit actor transaction

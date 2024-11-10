@@ -13,7 +13,7 @@ jobs:
 
 # Build the WASMs and check everything is working.
 
-      - uses: denoland/setup-deno@v1
+      - uses: denoland/setup-deno@v2
       - run: deno task test
 
 # Create the web root directory.
@@ -40,5 +40,5 @@ jobs:
       - run: cp -R apps/debugger _site/debugger
       - run: cp -R apps/playground _site/playground
       - run: deno run -A apps/playground/optimize.js _site/playground/index.html
-      - uses: actions/upload-pages-artifact@v2
-      - uses: actions/deploy-pages@v2
+      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/deploy-pages@v4

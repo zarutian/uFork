@@ -51,7 +51,7 @@ pub const VM_SPONSOR: Any   = Any::fix(0x08);  // +8
 pub const VM_ACTOR: Any     = Any::fix(0x09);  // +9
 pub const VM_DICT: Any      = Any::fix(0x0A);  // +10
 pub const VM_DEQUE: Any     = Any::fix(0x0B);  // +11
-pub const VM_MY: Any        = Any::fix(0x0C);  // +12
+pub const VM_0C: Any        = Any::fix(0x0C);  // RESERVED
 pub const VM_ALU: Any       = Any::fix(0x0D);  // +13
 pub const VM_CMP: Any       = Any::fix(0x0E);  // +14
 pub const VM_END: Any       = Any::fix(0x0F);  // +15
@@ -67,10 +67,10 @@ pub const VM_DROP: Any      = Any::fix(0x17);  // +23
 
 pub const VM_MSG: Any       = Any::fix(0x18);  // +24
 pub const VM_STATE: Any     = Any::fix(0x19);  // +25
-pub const VM_SEND: Any      = Any::fix(0x1A);  // +26
-pub const VM_SIGNAL: Any    = Any::fix(0x1B);  // +27
-pub const VM_NEW: Any       = Any::fix(0x1C);  // +28
-pub const VM_BEH: Any       = Any::fix(0x1D);  // +29
+pub const VM_1A: Any        = Any::fix(0x1A);  // RESERVED
+pub const VM_1B: Any        = Any::fix(0x1B);  // RESERVED
+pub const VM_1C: Any        = Any::fix(0x1C);  // RESERVED
+pub const VM_1D: Any        = Any::fix(0x1D);  // RESERVED
 pub const VM_1E: Any        = Any::fix(0x1E);  // RESERVED
 pub const VM_1F: Any        = Any::fix(0x1F);  // RESERVED
 
@@ -113,16 +113,12 @@ pub const CMP_LT: Any       = PLUS_3;
 pub const CMP_LE: Any       = PLUS_4;
 pub const CMP_NE: Any       = PLUS_5;
 
-// VM_MY actor operations
-pub const MY_SELF: Any      = ZERO;
-pub const MY_BEH: Any       = PLUS_1;
-pub const MY_STATE: Any     = PLUS_2;
-
 // VM_ACTOR actor operations
 pub const ACTOR_SEND: Any   = ZERO;
 pub const ACTOR_POST: Any   = PLUS_1;
 pub const ACTOR_CREATE: Any = PLUS_2;
 pub const ACTOR_BECOME: Any = PLUS_3;
+pub const ACTOR_SELF: Any   = PLUS_4;
 
 // VM_END thread actions
 pub const END_ABORT: Any    = MINUS_1;
@@ -146,22 +142,22 @@ pub struct Any {
 }
 
 impl Any {
-    pub const fn new(raw: Raw) -> Any {
+    pub const fn new(raw: Raw) -> Self {
         Any { raw }
     }
-    pub const fn fix(num: isize) -> Any {
+    pub const fn fix(num: isize) -> Self {
         let raw = num as Raw;
         Any::new(DIR_RAW | raw)
     }
-    pub const fn cap(ofs: usize) -> Any {
+    pub const fn cap(ofs: usize) -> Self {
         let raw = (ofs as Raw) & !MSK_RAW;
         Any::new(OPQ_RAW | MUT_RAW | raw)
     }
-    pub const fn rom(ofs: usize) -> Any {
+    pub const fn rom(ofs: usize) -> Self {
         let raw = (ofs as Raw) & !MSK_RAW;
         Any::new(raw)
     }
-    pub const fn ram(ofs: usize) -> Any {
+    pub const fn ram(ofs: usize) -> Self {
         let raw = (ofs as Raw) & !MSK_RAW;
         Any::new(MUT_RAW | raw)
     }

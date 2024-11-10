@@ -74,11 +74,15 @@
 // To initialize the core, call the 'h_initialize' method and run the returned
 // requestor to completion.
 
-/*jslint web, long, bitwise, white */
+/*jslint web, global, long, bitwise, white */
 
+import assemble from "https://ufork.org/lib/assemble.js";
 import parseq from "https://ufork.org/lib/parseq.js";
 import requestorize from "https://ufork.org/lib/rq/requestorize.js";
 import unpromise from "https://ufork.org/lib/rq/unpromise.js";
+const wasm_url = import.meta.resolve("https://ufork.org/wasm/ufork.wasm");
+const asm_url = import.meta.resolve("../../lib/eq.asm");
+const lib_url = import.meta.resolve("../../lib/");
 
 // Type-tag bits
 
@@ -121,7 +125,7 @@ const VM_SPONSOR= 0x80000008;  // +8
 const VM_ACTOR  = 0x80000009;  // +9
 const VM_DICT   = 0x8000000A;  // +10
 const VM_DEQUE  = 0x8000000B;  // +11
-const VM_MY     = 0x8000000C;  // +12
+//const VM_0C     = 0x8000000C;  // reserved
 const VM_ALU    = 0x8000000D;  // +13
 const VM_CMP    = 0x8000000E;  // +14
 const VM_END    = 0x8000000F;  // +15
@@ -137,10 +141,10 @@ const VM_DROP   = 0x80000017;  // +23
 
 const VM_MSG    = 0x80000018;  // +24
 const VM_STATE  = 0x80000019;  // +25
-const VM_SEND   = 0x8000001A;  // +26
-const VM_SIGNAL = 0x8000001B;  // +27
-const VM_NEW    = 0x8000001C;  // +28
-const VM_BEH    = 0x8000001D;  // +29
+//const VM_1A     = 0x8000001A;  // reserved
+//const VM_1B     = 0x8000001B;  // reserved
+//const VM_1C     = 0x8000001C;  // reserved
+//const VM_1D     = 0x8000001D;  // reserved
 //const VM_1E     = 0x8000001E;  // reserved
 //const VM_1F     = 0x8000001F;  // reserved
 
@@ -156,12 +160,11 @@ const MEMORY_OFS = 0;
 const DDEQUE_OFS = 1;
 const DEBUG_DEV_OFS = 2;
 const CLOCK_DEV_OFS = 3;
-const IO_DEV_OFS = 4;
-const BLOB_DEV_OFS = 5;
-const TIMER_DEV_OFS = 6;
-const MEMO_DEV_OFS = 7;
-const HOST_DEV_OFS = 8;
-const RANDOM_DEV_OFS = 9;
+const TIMER_DEV_OFS = 4;
+const IO_DEV_OFS = 5;
+const BLOB_DEV_OFS = 6;
+const RANDOM_DEV_OFS = 7;
+const HOST_DEV_OFS = 14;
 const SPONSOR_OFS = 15;
 
 // Error codes (from core.rs)
@@ -242,7 +245,7 @@ const instr_label = [
     "actor",
     "dict",
     "deque",
-    "my",
+    "VM_0C",        // reserved
     "alu",
     "cmp",
     "end",
@@ -256,10 +259,10 @@ const instr_label = [
     "drop",
     "msg",
     "state",
-    "send",
-    "signal",
-    "new",
-    "beh",
+    "VM_1A",        // reserved
+    "VM_1B",        // reserved
+    "VM_1C",        // reserved
+    "VM_1D",        // reserved
     "VM_1E",        // reserved
     "VM_1F"         // reserved
 ];
@@ -297,12 +300,8 @@ const actor_imm_label = [
     "send",
     "post",
     "create",
-    "become"
-];
-const my_imm_label = [
-    "self",
-    "beh",
-    "state"
+    "become",
+    "self"
 ];
 const deque_imm_label = [
     "new",
@@ -731,8 +730,6 @@ function make_core({
                     s += alu_imm_label[imm];
                 } else if ((quad.x === VM_CMP) && (imm < cmp_imm_label.length)) {
                     s += cmp_imm_label[imm];
-                } else if ((quad.x === VM_MY) && (imm < my_imm_label.length)) {
-                    s += my_imm_label[imm];
                 } else if ((quad.x === VM_ACTOR) && (imm < actor_imm_label.length)) {
                     s += actor_imm_label[imm];
                 } else if ((quad.x === VM_DEQUE) && (imm < deque_imm_label.length)) {
@@ -1004,10 +1001,6 @@ function make_core({
                     || node.op === "roll"
                     || node.op === "msg"
                     || node.op === "state"
-                    || node.op === "signal"
-                    || node.op === "send"
-                    || node.op === "new"
-                    || node.op === "beh"
                 ) {
                     fields.y = fixnum(node.imm);
                     fields.z = instruction(node.k);
@@ -1034,9 +1027,6 @@ function make_core({
                     fields.z = instruction(node.k);
                 } else if (node.op === "cmp") {
                     fields.y = label(node.imm, cmp_imm_label);
-                    fields.z = instruction(node.k);
-                } else if (node.op === "my") {
-                    fields.y = label(node.imm, my_imm_label);
                     fields.z = instruction(node.k);
                 } else if (node.op === "actor") {
                     fields.y = label(node.imm, actor_imm_label);
@@ -1687,65 +1677,61 @@ function make_core({
     });
 }
 
-//debug import assemble from "https://ufork.org/lib/assemble.js";
-//debug import scm from "https://ufork.org/lib/scheme.js";
-//debug import clock_dev from "./clock_dev.js";
-//debug import random_dev from "./random_dev.js";
-//debug import io_dev from "./io_dev.js";
-//debug import blob_dev from "./blob_dev.js";
-//debug import timer_dev from "./timer_dev.js";
-//debug const wasm_url = import.meta.resolve("https://ufork.org/wasm/ufork.wasm");
-//debug const asm_url = import.meta.resolve("../../lib/scm.asm");
-//debug const lib_url = import.meta.resolve("../../lib/");
-//debug let core;
-//debug function run_ufork() {
-//debug     const status = core.h_run_loop(0);
-//debug     console.log("IDLE:", core.u_fault_msg(core.u_fix_to_i32(status)));
-//debug }
-//debug core = make_core({
-//debug     wasm_url,
-//debug     on_wakeup(device_offset) {
-//debug         console.log("WAKE:", device_offset);
-//debug         run_ufork();
-//debug     },
-//debug     on_log: console.log,
-//debug     log_level: LOG_DEBUG,
-//debug     import_map: {"https://ufork.org/lib/": lib_url},
-//debug     compilers: {asm: assemble, scm: scm.compile}
-//debug });
-//debug parseq.sequence([
-//debug     core.h_initialize(),
-//debug     core.h_import(asm_url),
-//debug     requestorize(function (asm_module) {
-//debug         // Install devices
-//debug         clock_dev(core);
-//debug         random_dev(core);
-//debug         io_dev(core);
-//debug         blob_dev(core);
-//debug         timer_dev(core);
-//debug         // Test suite
-//debug         console.log("u_fixnum(0) =", core.u_fixnum(0), core.u_fixnum(0).toString(16), core.u_print(core.u_fixnum(0)));
-//debug         console.log("u_fixnum(1) =", core.u_fixnum(1), core.u_fixnum(1).toString(16), core.u_print(core.u_fixnum(1)));
-//debug         console.log("u_fixnum(-1) =", core.u_fixnum(-1), core.u_fixnum(-1).toString(16), core.u_print(core.u_fixnum(-1)));
-//debug         console.log("u_fixnum(-2) =", core.u_fixnum(-2), core.u_fixnum(-2).toString(16), core.u_print(core.u_fixnum(-2)));
-//debug         console.log("h_rom_top() =", core.h_rom_top(), core.u_print(core.h_rom_top()));
-//debug         console.log("h_ram_top() =", core.h_ram_top(), core.u_print(core.h_ram_top()));
-//debug         console.log("u_ramptr(5) =", core.u_ramptr(5), core.u_print(core.u_ramptr(5)));
-//debug         console.log("u_ptr_to_cap(u_ramptr(3)) =", core.u_ptr_to_cap(core.u_ramptr(3)), core.u_print(core.u_ptr_to_cap(core.u_ramptr(3))));
-//debug         // Boot
-//debug         const sponsor_ptr = core.u_ramptr(SPONSOR_OFS);
-//debug         const sponsor = core.u_read_quad(sponsor_ptr);
-//debug         sponsor.t = core.u_fixnum(4096);    // memory
-//debug         sponsor.x = core.u_fixnum(256);     // events
-//debug         sponsor.y = core.u_fixnum(4096);    // cycles
-//debug         core.u_write_quad(sponsor_ptr, sponsor);
-//debug         core.h_boot(asm_module.boot);
-//debug         const start = performance.now();
-//debug         run_ufork();
-//debug         const duration = performance.now() - start;
-//debug         return duration.toFixed(3) + "ms";
-//debug     })
-//debug ])(console.log);
+function demo(log) {
+    let core;
+
+    function run_ufork() {
+        const status = core.h_run_loop(0);
+        log("IDLE:", core.u_fault_msg(core.u_fix_to_i32(status)));
+    }
+
+    core = make_core({
+        wasm_url,
+        on_wakeup(device_offset) {
+            log("WAKE:", device_offset);
+            run_ufork();
+        },
+        on_log: log,
+        log_level: LOG_DEBUG,
+        import_map: {"https://ufork.org/lib/": lib_url},
+        compilers: {asm: assemble}
+    });
+    parseq.sequence([
+        core.h_initialize(),
+        core.h_import(asm_url),
+        requestorize(function (asm_module) {
+
+// Test.
+
+            log("u_fixnum(0) =", core.u_fixnum(0), core.u_fixnum(0).toString(16), core.u_print(core.u_fixnum(0)));
+            log("u_fixnum(1) =", core.u_fixnum(1), core.u_fixnum(1).toString(16), core.u_print(core.u_fixnum(1)));
+            log("u_fixnum(-1) =", core.u_fixnum(-1), core.u_fixnum(-1).toString(16), core.u_print(core.u_fixnum(-1)));
+            log("u_fixnum(-2) =", core.u_fixnum(-2), core.u_fixnum(-2).toString(16), core.u_print(core.u_fixnum(-2)));
+            log("h_rom_top() =", core.h_rom_top(), core.u_print(core.h_rom_top()));
+            log("h_ram_top() =", core.h_ram_top(), core.u_print(core.h_ram_top()));
+            log("u_ramptr(5) =", core.u_ramptr(5), core.u_print(core.u_ramptr(5)));
+            log("u_ptr_to_cap(u_ramptr(3)) =", core.u_ptr_to_cap(core.u_ramptr(3)), core.u_print(core.u_ptr_to_cap(core.u_ramptr(3))));
+
+// Boot.
+
+            const sponsor_ptr = core.u_ramptr(SPONSOR_OFS);
+            const sponsor = core.u_read_quad(sponsor_ptr);
+            sponsor.t = core.u_fixnum(4096);    // memory
+            sponsor.x = core.u_fixnum(256);     // events
+            sponsor.y = core.u_fixnum(4096);    // cycles
+            core.u_write_quad(sponsor_ptr, sponsor);
+            core.h_boot(asm_module.boot);
+            const start = performance.now();
+            run_ufork();
+            const duration = performance.now() - start;
+            return duration.toFixed(3) + "ms";
+        })
+    ])(log);
+}
+
+if (import.meta.main) {
+    demo(globalThis.console.log);
+}
 
 export default Object.freeze({
 
@@ -1791,17 +1777,12 @@ export default Object.freeze({
     VM_CMP,
     VM_IF,
     VM_MSG,
-    VM_MY,
     VM_ACTOR,
-    VM_SEND,
-    VM_NEW,
-    VM_BEH,
     VM_END,
     VM_SPONSOR,
     VM_DEBUG,
     VM_DEQUE,
     VM_STATE,
-    VM_SIGNAL,
     VM_ASSERT,
     QUAD_ROM_MAX,
     QUAD_RAM_MAX,
@@ -1810,12 +1791,11 @@ export default Object.freeze({
     DDEQUE_OFS,
     DEBUG_DEV_OFS,
     CLOCK_DEV_OFS,
+    TIMER_DEV_OFS,
     IO_DEV_OFS,
     BLOB_DEV_OFS,
-    TIMER_DEV_OFS,
-    MEMO_DEV_OFS,
-    HOST_DEV_OFS,
     RANDOM_DEV_OFS,
+    HOST_DEV_OFS,
     SPONSOR_OFS,
     E_OK,
     E_FAIL,

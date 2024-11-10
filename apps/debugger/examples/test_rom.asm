@@ -21,17 +21,6 @@ test_pairs:
     assert #?               ; 3
     drop 0                  ; 3
     assert 3                ; --
-    part -1                 ; --
-    assert #?               ; --
-    push #nil               ; ()
-    part -1                 ; --
-    assert #?               ; --
-    push #nil               ; ()
-    push 1                  ; () 1
-    pair 1                  ; (1)
-    part -1                 ; 1
-    assert 1                ; --
-    assert #?               ; --
 test_if:
     part 1                  ; #? #?
     drop 1                  ; #?
@@ -124,6 +113,9 @@ test_actors:
     push #?                 ; #?
     push cell_beh           ; #? cell_beh
     actor create            ; rcvr=cell_beh.#?
+    dup 1                   ; rcvr rcvr
+    typeq #actor_t          ; rcvr is_actor(rcvr)
+    assert #t               ; rcvr
     push once_beh           ; rcvr once_beh
     actor create            ; actor=once_beh.rcvr
     push #t                 ; actor #t
